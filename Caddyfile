@@ -1,0 +1,24 @@
+# ═══════════════════════════════════════════════════════════
+# Kill Metraj — Caddy Reverse Proxy Config
+# ───────────────────────────────────────────────────────────
+# http://{$DOMAIN} — форсит HTTP на :80 без авто-HTTPS/редиректа
+# (нужно для доступа по голому IP). Для домена с HTTPS убрать
+# префикс http:// и указать домен в DOMAIN.
+#
+# Caddy отдаёт ВСЁ на frontend:80 (nginx), а nginx уже проксирует
+# /api, /socket.io, /health, /metrics на backend:5001. WebSocket
+# Caddy апгрейдит автоматически.
+# ═══════════════════════════════════════════════════════════
+
+:80 {
+    reverse_proxy frontend:80 {
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    log {
+        output file /data/access.log
+        format json
+    }
+}
