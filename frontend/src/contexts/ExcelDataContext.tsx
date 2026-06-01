@@ -1028,7 +1028,7 @@ export const ExcelDataProvider: React.FC<ExcelDataProviderProps> = ({ children }
         
         existingRoutes.forEach((r: any) => {
             const rid = String(r.id || '');
-            if (rid && rid.startsWith('route_')) {
+            if (rid && (rid.startsWith('route_') || rid.startsWith('autoroute_'))) {
                 routesMap.set(rid, r);
             }
         });
@@ -1052,10 +1052,12 @@ export const ExcelDataProvider: React.FC<ExcelDataProviderProps> = ({ children }
             if (seenIds.has(rid)) return false;
             seenIds.add(rid);
             
-            if (!rid.startsWith('route_')) return true;
+            // Если это сохраненный в БД маршрут, оставляем его
+            if (!rid.startsWith('route_') && !rid.startsWith('autoroute_')) return true;
             
-            const manualOrderIds = (r.orders || []).map((o: any) => String(o.id || o.orderNumber || ''));
-            return !manualOrderIds.some((oid: string) => dbOrderIds.has(oid));
+            // Если это локальный маршрут (ручной или авто), удаляем его только если его заказы УЖЕ есть в БД-маршрутах
+            const localOrderIds = (r.orders || []).map((o: any) => String(o.id || o.orderNumber || ''));
+            return !localOrderIds.some((oid: string) => dbOrderIds.has(oid));
         });
 
         // v5.153: Обновление distanceKm курьеров из маршрутов БД немедленно
