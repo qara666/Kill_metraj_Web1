@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { robustGeocodingService } from '../services/robust-geocoding/RobustGeocodingService'
 import { distanceBetween } from '../services/robust-geocoding/candidateScoring'
+import { findZonesForLoc } from '../services/robust-geocoding/kmlZoneChecker'
 import { Route } from '../types/route'
 import { useCalculationProgress } from '../store/calculationProgressStore'
 
@@ -341,16 +342,36 @@ export const useRouteGeocoding = ({
             const routingProviderEarly = settings.routingProvider || 'turbo_instant';
             const isTurboInstant = routingProviderEarly === 'turbo_instant';
             if (allOrdersHaveCoords && (!confirmAddresses || isTurboInstant)) {
+                const ctx = robustGeocodingService.getZoneContext();
+                const hasActiveZones = (ctx?.activePolygons?.length ?? 0) > 0;
+                const hasAnyZones = (ctx?.allPolygons?.length ?? 0) > 0;
+                const hasSelectedKeys = (ctx?.selectedZoneKeys?.length ?? 0) > 0;
+
                 route.orders.forEach(order => {
                     const loc = { lat: order.coords!.lat, lng: order.coords!.lng };
                     
-                    const zoneInfo = robustGeocodingService.findZoneForCoords(loc.lat, loc.lng);
-                    if (!zoneInfo) {
-                        const ctx = robustGeocodingService.getZoneContext();
-                        if (ctx && (ctx.activePolygons?.length > 0 || ctx.allPolygons?.length > 0)) {
-                            console.warn(`[Расчет] FAST-PATH: заказ "${order.address}" (${loc.lat.toFixed(4)},${loc.lng.toFixed(4)}) ВНЕ активных секторов — исключён из маршрута`);
-                            return;
+                    // Try active polygons first for zone label
+                    let zoneInfo = robustGeocodingService.findZoneForCoords(loc.lat, loc.lng);
+                    
+                    // Fallback: scan allPolygons for zone label even if not in selectedZoneKeys
+                    if (!zoneInfo && hasAnyZones) {
+                        const allMatches = findZonesForLoc(loc, ctx.allPolygons, 0.025);
+                        if (allMatches.length > 0) {
+                            zoneInfo = { 
+                                zoneName: allMatches[0].polygon.name,
+                                hubName: allMatches[0].polygon.folderName 
+                            };
                         }
+                    }
+
+                    // Exclude order ONLY if:
+                    //  - user has explicitly selected zones (selectedZoneKeys not empty)
+                    //  - AND order is outside ALL polygons (not just active)
+                    //  - AND we are NOT in turbo_instant mode
+                    const isOutsideAll = !zoneInfo && hasAnyZones;
+                    if (isOutsideAll && hasSelectedKeys && !isTurboInstant) {
+                        console.warn(`[Расчет] FAST-PATH: заказ "${order.address}" (${loc.lat.toFixed(4)},${loc.lng.toFixed(4)}) ВНЕ всех KML секторов — исключён`);
+                        return;
                     }
                     
                     waypointLocs.push(loc);
@@ -359,8 +380,8 @@ export const useRouteGeocoding = ({
                         id: order.id,
                         lat: loc.lat,
                         lng: loc.lng,
-                        kmlZone: zoneInfo?.zoneName || order.kmlZone,
-                        kmlHub: zoneInfo?.hubName || order.kmlHub,
+                        kmlZone: zoneInfo?.zoneName || order.kmlZone || null,
+                        kmlHub: zoneInfo?.hubName || order.kmlHub || null,
                         streetNumberMatched: true,
                         isLocked: true,
                         geocodeRes: {
@@ -372,7 +393,7 @@ export const useRouteGeocoding = ({
                 });
                 
                 if (waypointLocs.length === 0 && route.orders.length > 0) {
-                    toast.error('Все адреса вне активных секторов. Проверьте геокодирование.', { duration: 8000 });
+                    toast.error('Все адреса вне активных секторов. Проверьте KML зоны в Настройках.', { duration: 8000 });
                     if (!skipStateUpdate) setIsCalculating(false);
                     return null;
                 }
