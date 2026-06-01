@@ -1,80 +1,61 @@
 /**
- * OSRMService — Secondary Routing Fallback
- *
- * Uses the Project-OSRM public demo server.
- * Note: Free-use, OSM-based.
+ * OSRMService — Public OSRM routing (router.project-osrm.org)
+ * Uses the same API call as /map tab for consistency and speed.
+ * Direct browser fetch — no backend proxy needed (CORS is open on public OSRM).
  */
-
-export interface OSRMLeg {
-  distance: { text: string; value: number }
-  duration: { text: string; value: number }
-  start_location?: { lat: number; lng: number }
-  end_location?: { lat: number; lng: number }
-}
 
 export interface OSRMRouteResult {
   feasible: boolean
-  legs?: OSRMLeg[]
   totalDuration?: number
   totalDistance?: number
+  geometry?: string
+  legs?: any[]
 }
 
 const OSRM_BASE_URL = 'https://router.project-osrm.org'
-import { API_URL } from '../config/apiConfig'
 
 export class OSRMService {
-  private static getMaybeProxiedUrl(targetUrl: string): string {
-    const cleanBase = API_URL.replace(/\/+$/, '');
-    return `${cleanBase}/api/proxy/routing?url=${encodeURIComponent(targetUrl)}`;
-  }
-
   /**
-   * Calculate a route using OSRM.
+   * Calculate route using public OSRM trip API — identical to /map tab.
+   * Uses trip/v1 (TSP) for optimal ordering, with route/v1 fallback.
    */
   static async calculateRoute(
     locations: { lat: number; lng: number }[]
   ): Promise<OSRMRouteResult> {
     if (locations.length < 2) return { feasible: false }
 
-    const coordsStr = locations.map(l => `${l.lng},${l.lat}`).join(';')
-    const targetUrl = `${OSRM_BASE_URL}/route/v1/driving/${coordsStr}?overview=false&steps=false`
-    const finalUrl = this.getMaybeProxiedUrl(targetUrl);
+    const coordsStr = locations.map(l => `${Number(l.lng).toFixed(7)},${Number(l.lat).toFixed(7)}`).join(';')
 
+    // Primary: trip/v1 (same as /map tab — gives optimal route order)
     try {
-      const response = await fetch(finalUrl, { signal: AbortSignal.timeout(5000) })
-      if (!response.ok) return { feasible: false }
-
-      const data = await response.json()
-      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-        return { feasible: false }
+      const tripUrl = `${OSRM_BASE_URL}/trip/v1/driving/${coordsStr}?source=first&overview=full&geometries=geojson`
+      const r = await fetch(tripUrl, { signal: AbortSignal.timeout(8000) })
+      if (r.ok) {
+        const d = await r.json()
+        if (d.code === 'Ok' && d.trips?.[0]) {
+          return {
+            feasible: true,
+            totalDistance: d.trips[0].distance,
+            totalDuration: d.trips[0].duration
+          }
+        }
       }
+    } catch { }
 
-      const route = data.routes[0]
-      const legs: OSRMLeg[] = (route.legs || []).map((leg: any, idx: number) => ({
-        distance: { 
-          value: leg.distance, 
-          text: leg.distance >= 1000 ? `${(leg.distance / 1000).toFixed(1)} km` : `${leg.distance.toFixed(0)} m` 
-        },
-        duration: { 
-          value: leg.duration, 
-          text: `${Math.round(leg.duration / 60)} min` 
-        },
-        start_location: locations[idx],
-        end_location: locations[idx + 1]
-      }))
-
+    // Fallback: route/v1
+    try {
+      const routeUrl = `${OSRM_BASE_URL}/route/v1/driving/${coordsStr}?overview=false&steps=false`
+      const r = await fetch(routeUrl, { signal: AbortSignal.timeout(8000) })
+      if (!r.ok) return { feasible: false }
+      const d = await r.json()
+      if (d.code !== 'Ok' || !d.routes?.[0]) return { feasible: false }
       return {
         feasible: true,
-        legs,
-        totalDistance: route.distance,
-        totalDuration: route.duration
+        totalDistance: d.routes[0].distance,
+        totalDuration: d.routes[0].duration
       }
     } catch (error: any) {
-      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
-         // Silenced for clean console. RobustRoutingService handles the fallback.
-      } else {
-         console.warn('[Маршрут] Ошибка OSRM:', error?.message ?? error)
-      }
+      console.warn('[OSRM] Error:', error?.message ?? error)
       return { feasible: false }
     }
   }

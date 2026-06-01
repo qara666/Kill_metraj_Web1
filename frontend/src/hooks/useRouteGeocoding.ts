@@ -895,63 +895,49 @@ export const useRouteGeocoding = ({
 
             if (!skipStateUpdate) useCalculationProgress.getState().setProgress(95)
 
+            // ⚡ TURBO RACE for non-turbo mode: run all engines in parallel anyway
+            const makeRacer = (fn: () => Promise<any>) => fn().catch(() => Promise.reject('failed'));
+            const racers: Promise<any>[] = [];
 
-            if (routingProvider === 'yapiko_osrm' && yapikoUrl) {
-                try {
+            if (yapikoUrl) {
+                racers.push(makeRacer(async () => {
                     const { RobustRoutingService } = await import('../services/RobustRoutingService')
-                    const yRes = await RobustRoutingService.calculateRoute(points)
-                    if (yRes.feasible && yRes.totalDistance && yRes.totalDistance > 0) {
-                        totalDistance = yRes.totalDistance
-                        totalDuration = yRes.totalDuration || 0
-                        routingSuccess = true
-                        console.log(`[Маршрут] Yapiko OSRM — успех: ${totalDistance}м`)
-                    } else {
-                        console.warn('[Маршрут] Yapiko OSRM вернул 0 или ошибку. Пробую Valhalla.')
-                    }
-                } catch (e) {
-                    console.warn('[Маршрут] Ошибка Yapiko OSRM, пробую Valhalla:', e)
-                }
+                    const r = await RobustRoutingService.calculateRoute(points)
+                    if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Yapiko' }
+                    throw new Error('empty')
+                }));
             }
+            racers.push(makeRacer(async () => {
+                const { ValhallaService } = await import('../services/valhallaService')
+                const r = await ValhallaService.calculateRoute(points)
+                if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Valhalla' }
+                throw new Error('empty')
+            }));
+            racers.push(makeRacer(async () => {
+                const { OSRMService } = await import('../services/osrmService')
+                const r = await OSRMService.calculateRoute(points)
+                if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'OSRM' }
+                throw new Error('empty')
+            }));
 
-            // Try Valhalla (high quality)
-            if (!routingSuccess) {
-                try {
-                    const { ValhallaService } = await import('../services/valhallaService')
-                    const vRes = await ValhallaService.calculateRoute(points)
-                    if (vRes.feasible && vRes.totalDistance && vRes.totalDistance > 0) {
-                        totalDistance = vRes.totalDistance
-                        totalDuration = vRes.totalDuration || 0
-                        routingSuccess = true
-                        console.log(`[Маршрут] Valhalla — успех: ${totalDistance}м`)
-                    } else {
-                        console.warn('[Маршрут] Valhalla вернула 0 или ошибку. Пробую OSRM.')
-                    }
-                } catch (e) {
-                    console.warn('[Маршрут] Ошибка Valhalla, пробую OSRM:', e)
+            // Haversine fallback after 200ms
+            racers.push(new Promise(resolve => setTimeout(() => {
+                let h = 0;
+                for (let i = 0; i < points.length - 1; i++) {
+                    h += haversineDistance(points[i].lat, points[i].lng, points[i+1].lat, points[i+1].lng);
                 }
-            }
+                resolve({ dist: Math.round(h * 1.3), dur: Math.round((h * 1.3 / 1000) / 0.5 * 60), src: 'Haversine' });
+            }, 200)));
 
-            // Try OSRM (fast fallback)
-            if (!routingSuccess) {
-                try {
-                    const { OSRMService } = await import('../services/osrmService')
-                    const oRes = await OSRMService.calculateRoute(points)
-                    if (oRes.feasible && oRes.totalDistance && oRes.totalDistance > 0) {
-                        totalDistance = oRes.totalDistance
-                        totalDuration = oRes.totalDuration || 0
-                        routingSuccess = true
-                        console.log(`[Маршрут] OSRM — успех: ${totalDistance}м`)
-                    } else {
-                        console.warn('[Маршрут] OSRM вернул 0 или ошибку.')
-                    }
-                } catch (e) {
-                    console.warn('[Маршрут] OSRM не удался:', e)
-                }
-            }
+            const winnerResult = await Promise.any(racers).catch(() => null);
 
-            // Fallback - use Haversine if everything failed
-            if (!routingSuccess) {
-                console.warn('[Маршрут] Все провайдеры не смогли, используем Haversine.')
+            if (winnerResult) {
+                totalDistance = winnerResult.dist;
+                totalDuration = winnerResult.dur;
+                routingSuccess = true;
+                console.log(`[Маршрут] Успех: ${totalDistance}м через ${winnerResult.src}`);
+            } else {
+                console.warn('[Маршрут] Все провайдеры не смогли, используем Haversine напрямую.')
                 let haversineTotal = 0
                 for (let i = 0; i < points.length - 1; i++) {
                     haversineTotal += haversineDistance(points[i].lat, points[i].lng, points[i + 1].lat, points[i + 1].lng)
