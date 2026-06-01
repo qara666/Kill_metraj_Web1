@@ -9,3 +9,11 @@
 {"level":"info","message":"gRPC сервер запущен на порту 50051","service":"kill-metraj-backend","timestamp":"2026-06-01 19:18:28"}
 {"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:18:28"}
 {"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:18:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:20:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:22:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:24:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:26:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:28:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:30:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:32:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:34:28"}
