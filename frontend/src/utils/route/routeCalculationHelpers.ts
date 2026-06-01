@@ -156,6 +156,12 @@ function createNewGroup(
     (group as any).firstCoords = order.coords || null;
     (group as any).firstZone = order.deliveryZone || '';
     (group as any).lastKitchen = kitchen || undefined;
+    
+    // v9.1: Инициализируем maxExecutionTime, если заказ УЖЕ доставлен
+    const execTime = getExecutionTime(order);
+    if (execTime) {
+        (group as any).maxExecutionTime = execTime;
+    }
 
     return group;
 }
@@ -326,7 +332,7 @@ export function groupOrdersByTimeWindow(
 
     const groups: TimeWindowGroup[] = [];
     const manualGroupsMap = new Map<string, Order[]>();
-    const ordersForAuto: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; anchorTime: number; pickup?: number }> = [];
+    const ordersForAuto: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; anchorTime: number; pickup?: number; execution?: number }> = [];
 
     // НОВАЯ ЛОГИКА: Разделяем только ручные и остальные
     ordersWithAnchor.forEach(item => {
@@ -358,7 +364,7 @@ export function groupOrdersByTimeWindow(
     };
 
     // 2. Группируем автоматические заказы
-    ordersForAuto.forEach(({ order, planned, arrival, kitchen, anchorTime, pickup }) => {
+    ordersForAuto.forEach(({ order, planned, arrival, kitchen, anchorTime, pickup, execution }) => {
         const isActiveOrCompleted = isAssignedCourier && isOrderActiveOrCompleted(order);
         const hasPickupData = isActiveOrCompleted && !!pickup;
         
@@ -382,6 +388,15 @@ export function groupOrdersByTimeWindow(
             const lastAnchor = (currentGroup as any).lastAnchor || (currentGroup as any).firstAnchor;
             const firstOrder = currentGroup.orders[0];
             
+            // Условие 1.5 (v9.1): Строгий разрыв поездок (Исполнен)
+            // Если предыдущий заказ в группе УЖЕ доставлен (completedAt/execution) 
+            // ДО того, как курьер ВЗЯЛ текущий заказ (pickup/deliveringAt),
+            // то это ФИЗИЧЕСКИ разные поездки. Склеивать их нельзя.
+            let tripOverlapOk = true;
+            if (hasPickupData && (currentGroup as any).maxExecutionTime && pickup! > (currentGroup as any).maxExecutionTime) {
+                tripOverlapOk = false;
+            }
+
             // Условие 1: Близость по времени — СКОЛЬЗЯЩЕЕ от последнего добавленного заказа (не первого)
             const anchorDiff = anchorTime - lastAnchor;
             const timeWithinProximity = anchorDiff >= 0 && anchorDiff <= effectiveWindowMs;
@@ -446,7 +461,8 @@ export function groupOrdersByTimeWindow(
             // Определяем причину разбиения (приоритет: время, SLA, гео, район, готовность)
             // v7.x: Обновлена причина гео-разбиения с новой логикой от центра
             let newSplitReason = '';
-            if (!timeWithinProximity) newSplitReason = `Время (${Math.round(anchorDiff / 60000)} мин > ${(effectiveWindowMs/60000).toFixed(0)})`;
+            if (!tripOverlapOk) newSplitReason = 'Предыдущий заказ уже исполнен до взятия этого (разные рейсы)';
+            else if (!timeWithinProximity) newSplitReason = `Время (${Math.round(anchorDiff / 60000)} мин > ${(effectiveWindowMs/60000).toFixed(0)})`;
             else if (!deliveryFits) newSplitReason = `SLA (${Math.round(deliverySpan / 60000)} мин > ${(deliverySpanMs/60000).toFixed(0)})`;
             else if (!distanceOk) newSplitReason = `Гео (от центра >30км или от первого >25км)`;
             else if (!districtOk) newSplitReason = `Район (${orderZone} ≠ ${groupZone})`;
@@ -462,6 +478,13 @@ export function groupOrdersByTimeWindow(
                 currentGroup.arrivalEnd = Math.max(currentGroup.arrivalEnd || 0, arrival);
                 (currentGroup as any).lastAnchor = anchorTime; // v8.1: продвинуть скользящее окно
                 if (kitchen) (currentGroup as any).lastKitchen = kitchen;
+                
+                // v9.1: Обновляем maxExecutionTime для группы, если заказ доставлен
+                if (execution) {
+                    const currentMax = (currentGroup as any).maxExecutionTime || 0;
+                    (currentGroup as any).maxExecutionTime = Math.max(currentMax, execution);
+                }
+
                 updatePredictedDeparture(currentGroup);
             } else {
                 // Заказ не подходит - закрываем текущую группу и начинаем новую

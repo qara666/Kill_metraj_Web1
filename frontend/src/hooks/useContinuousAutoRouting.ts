@@ -299,6 +299,45 @@ export function useContinuousAutoRouting() {
                             const poly = ctx.activePolygons.find(p => p.name.toLowerCase() === orderZoneName.toLowerCase());
                             if (poly) {
                                 let centerLat = NaN, centerLng = NaN;
+                                
+                                // INNOVATION 2.5: Поиск улицы внутри зоны до сброса в центр
+                                const addressStr = String(o.address || o.Address || o.originalAddress || '');
+                                const streetMatch = addressStr.match(/([^,]+ул\.|ул\.[^,]+|[^,]+проспект|[^,]+пр-т|[^,]+переулок|[^,]+пер\.|[^,]+бульвар|[^,]+мкр\.|[^,]+микрорайон)[^,]*/i);
+                                const streetName = (streetMatch ? streetMatch[0] : addressStr.split(',')[0]).replace(/\d+.*$/, '').trim();
+                                
+                                let relaxedSuccess = false;
+                                if (streetName.length > 3) {
+                                    try {
+                                        const city = (robustGeocodingService as any).cityBias || 'Алматы';
+                                        const relaxedQuery = `${streetName}, ${city}`;
+                                        const relaxedRes = await robustGeocodingService.geocode(relaxedQuery);
+                                        const relaxedBest = relaxedRes?.best;
+                                        const relaxedLoc = relaxedBest?.raw?.geometry?.location;
+                                        const relaxedHasErrors = relaxedBest?.hasGeoErrors;
+                                        if (relaxedLoc && !relaxedHasErrors) {
+                                            const rLat = typeof relaxedLoc.lat === 'function' ? relaxedLoc.lat() : Number(relaxedLoc.lat);
+                                            const rLng = typeof relaxedLoc.lng === 'function' ? relaxedLoc.lng() : Number(relaxedLoc.lng);
+                                            const streetZone = robustGeocodingService.findZoneForCoords(rLat, rLng);
+                                            if (streetZone && streetZone.zoneName.toLowerCase() === orderZoneName.toLowerCase()) {
+                                                // Улица найдена и она внутри нужной KML зоны!
+                                                o.coords = { lat: rLat, lng: rLng };
+                                                o.kmlZone = poly.name;
+                                                o.kmlHub = poly.folderName;
+                                                o.locationType = 'KML_STREET_MATCH';
+                                                o.geocodeScore = 0.72;
+                                                relaxedSuccess = true;
+                                            }
+                                        }
+                                    } catch (e) {
+                                        console.warn('[Robot] Relaxed street geocoding failed', e);
+                                    }
+                                }
+
+                                if (relaxedSuccess) {
+                                    return; // Нашли улицу в правильной зоне — ок!
+                                }
+
+                                // Улицу не нашли/не в той зоне → падаем в центр KML полигона
                                 if (poly.bounds && typeof poly.bounds.getNorthEast === 'function') {
                                     centerLat = (poly.bounds.getNorthEast().lat() + poly.bounds.getSouthWest().lat()) / 2;
                                     centerLng = (poly.bounds.getNorthEast().lng() + poly.bounds.getSouthWest().lng()) / 2;
@@ -308,10 +347,7 @@ export function useContinuousAutoRouting() {
                                 }
                                 
                                 if (!isNaN(centerLat) && !isNaN(centerLng)) {
-                                    // INNOVATION: OSRM Road Snapping
-                                    // Центр полигона может попасть в озеро или промзону без дорог.
-                                    // Мы запрашиваем у OSRM ближайшую проезжую часть к этому центру,
-                                    // чтобы километраж и линия маршрута рисовались идеально по дорогам!
+                                    // OSRM Road Snapping: примагничиваем центр к ближайшей дороге
                                     try {
                                         const nearestUrl = `https://router.project-osrm.org/nearest/v1/driving/${centerLng},${centerLat}?number=1`;
                                         const snapRes = await fetch(nearestUrl);
@@ -330,7 +366,7 @@ export function useContinuousAutoRouting() {
                                     o.locationType = 'KML_CENTER_FALLBACK';
                                     o.geocodeScore = 0.5;
                                     o.streetNumberMatched = false;
-                                    return; // Successfully snapped to KML center!
+                                    return; // Snapped to KML center + road!
                                 }
                             }
                         }
