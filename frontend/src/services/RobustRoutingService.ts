@@ -26,6 +26,7 @@ export interface RobustRouteResult {
         waypoints: RoutingPoint[];
         destination: RoutingPoint;
     };
+    geometry?: string;
     error?: string;
 }
 
@@ -145,7 +146,8 @@ export class RobustRoutingService {
                         feasible: true,
                         totalDistance: res.totalDistance,
                         totalDuration: res.totalDuration || 0,
-                        engine: 'yapiko_osrm'
+                        engine: 'yapiko_osrm',
+                        geometry: res.geometry
                     });
                 }
             } catch (e) {}
