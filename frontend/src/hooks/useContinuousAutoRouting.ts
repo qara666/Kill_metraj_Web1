@@ -308,6 +308,22 @@ export function useContinuousAutoRouting() {
                                 }
                                 
                                 if (!isNaN(centerLat) && !isNaN(centerLng)) {
+                                    // INNOVATION: OSRM Road Snapping
+                                    // Центр полигона может попасть в озеро или промзону без дорог.
+                                    // Мы запрашиваем у OSRM ближайшую проезжую часть к этому центру,
+                                    // чтобы километраж и линия маршрута рисовались идеально по дорогам!
+                                    try {
+                                        const nearestUrl = `https://router.project-osrm.org/nearest/v1/driving/${centerLng},${centerLat}?number=1`;
+                                        const snapRes = await fetch(nearestUrl);
+                                        const snapData = await snapRes.json();
+                                        if (snapData?.waypoints?.[0]?.location) {
+                                            centerLng = snapData.waypoints[0].location[0];
+                                            centerLat = snapData.waypoints[0].location[1];
+                                        }
+                                    } catch (e) {
+                                        console.warn('[Robot] OSRM snap failed, using raw KML center', e);
+                                    }
+
                                     o.coords = { lat: centerLat, lng: centerLng };
                                     o.kmlZone = poly.name;
                                     o.kmlHub = poly.folderName;

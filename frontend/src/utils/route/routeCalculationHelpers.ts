@@ -250,7 +250,7 @@ export function groupOrdersByTimeWindow(
     }
 
     const noTimeOrders: Order[] = [];
-    const ordersWithData: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; execution?: number }> = [];
+    const ordersWithData: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; execution?: number; pickup?: number }> = [];
 
     // Разделяем заказы
     uniqueOrders.forEach(order => {
@@ -265,6 +265,7 @@ export function groupOrdersByTimeWindow(
         
         // v5.182: Время исполнения для завершенных заказов
         const executionTime = getExecutionTime(order);
+        const pickupTime = getPickupTime(order);
 
         // ВАЖНО: Если время поступления отсутствует, используем плановое время или время кухни как прокси
         if (!arrivalTime) {
@@ -301,15 +302,20 @@ export function groupOrdersByTimeWindow(
             planned: finalPlannedTs,
             arrival: finalArrivalTs,
             kitchen: kitchenTime || undefined,
-            execution: executionTime || undefined
+            execution: executionTime || undefined,
+            pickup: pickupTime || undefined
         });
     });
 
-    // v5.182: Используем executionTime (для завершённых) или planned как якорь — НЕ arrival/createdAt
-    // Это соответствует поведению бэкенда turboGroupingHelpers
+    // DISPATCH WAVE GROUPING (v9.0): Для назначенных курьеров используем pickupTime
+    // (момент перехода заказа в "Доставляется") как главный якорь.
+    // Это точно отражает реальность: заказы, которые курьер ВЗЯЛ в одну поездку,
+    // получают статус "Доставляется" в течение 15 минут друг от друга.
+    // Для НЕназначенных курьеров — старая логика (execution || planned).
+    const isAssigned = courierId && courierId !== 'unassigned' && courierId !== 'unassigned_auto' && courierId !== 'Неизвестный курьер' && courierId !== 'НЕ НАЗНАЧЕНО' && courierId !== 'ПО';
     const ordersWithAnchor = ordersWithData.map(item => ({
         ...item,
-        anchorTime: item.execution || item.planned
+        anchorTime: isAssigned && item.pickup ? item.pickup : (item.execution || item.planned)
     }));
 
     // Сортируем по опорному времени (anchorTime)
@@ -320,7 +326,7 @@ export function groupOrdersByTimeWindow(
 
     const groups: TimeWindowGroup[] = [];
     const manualGroupsMap = new Map<string, Order[]>();
-    const ordersForAuto: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; anchorTime: number }> = [];
+    const ordersForAuto: Array<{ order: Order; planned: number; arrival: number; kitchen?: number; anchorTime: number; pickup?: number }> = [];
 
     // НОВАЯ ЛОГИКА: Разделяем только ручные и остальные
     ordersWithAnchor.forEach(item => {
@@ -352,14 +358,19 @@ export function groupOrdersByTimeWindow(
     };
 
     // 2. Группируем автоматические заказы
-    ordersForAuto.forEach(({ order, planned, arrival, kitchen, anchorTime }) => {
+    ordersForAuto.forEach(({ order, planned, arrival, kitchen, anchorTime, pickup }) => {
         const isActiveOrCompleted = isAssignedCourier && isOrderActiveOrCompleted(order);
+        const hasPickupData = isActiveOrCompleted && !!pickup;
         
-        // INNOVATION: Для назначенного курьера мы ДРАСТИЧЕСКИ увеличиваем "окно", чтобы система 
-        // НЕ разбивала 3 заказа, которые курьер реально повез вместе, на два разных маршрута из-за таймингов.
-        // Если курьер везет их вместе, значит они в одном окне (до 3 часов разницы).
-        const effectiveWindowMs = isActiveOrCompleted ? (180 * 60 * 1000) : (arrivalProximityMinutes * 60 * 1000); 
-        const deliverySpanMs = isActiveOrCompleted ? (300 * 60 * 1000) : (maxDeliverySpanMinutes * 60 * 1000);         
+        // DISPATCH WAVE GROUPING (v9.0):
+        // Если у заказа есть pickupTime → используем 15-минутное окно диспетчеризации.
+        // Это гарантирует, что 3 заказа, взятые курьером за 15 минут, ВСЕГДА будут в одном маршруте,
+        // а заказы, взятые через 30+ минут после возврата — в НОВОМ маршруте.
+        // Без pickupTime → стандартная логика по planned time.
+        const DISPATCH_WINDOW_MS = 15 * 60 * 1000; // 15 мин — окно диспетчеризации
+        const DELIVERY_EXECUTION_SPAN_MS = 120 * 60 * 1000; // 2 часа — максимальный span доставки в рейсе
+        const effectiveWindowMs = hasPickupData ? DISPATCH_WINDOW_MS : (isActiveOrCompleted ? (40 * 60 * 1000) : (arrivalProximityMinutes * 60 * 1000)); 
+        const deliverySpanMs = hasPickupData ? DELIVERY_EXECUTION_SPAN_MS : (isActiveOrCompleted ? (120 * 60 * 1000) : (maxDeliverySpanMinutes * 60 * 1000));         
         if (!currentGroup) {
             // Создаем новую группу для первого заказа
             currentGroup = createNewGroup(courierId, courierName, order, planned, arrival, groups.length, '');
@@ -399,10 +410,10 @@ export function groupOrdersByTimeWindow(
                     // Вычисление макс. расстояния от центра для ВСЕХ заказов в группе
                     const maxDistFromCenter = calculateMaxDistanceFromCenter(allOrdersForCenter, center);
                     
-                    // v7.x: Используем более мягкую из двух стратегий
-                    // v7.x: Используем более мягкую из двух стратегий
-                    const MAX_CENTER_DISTANCE = isActiveOrCompleted ? 50 : 30; // км
-                    const MAX_FIRST_DISTANCE = isActiveOrCompleted ? 40 : 25; // км
+                    // v9.0: Для заказов с pickupTime (реальные рейсы) — более мягкие лимиты,
+                    // т.к. курьер РЕАЛЬНО повёз их вместе.
+                    const MAX_CENTER_DISTANCE = hasPickupData ? 40 : 30; // км
+                    const MAX_FIRST_DISTANCE = hasPickupData ? 35 : 25; // км
                     
                     const centerBasedOk = maxDistFromCenter <= MAX_CENTER_DISTANCE;
                     const firstBasedOk = distanceToFirst <= MAX_FIRST_DISTANCE;
@@ -410,7 +421,7 @@ export function groupOrdersByTimeWindow(
                     distanceOk = centerBasedOk || firstBasedOk;
                 } else {
                     // Невозможно вычислить центр — используем исходную логику
-                    distanceOk = distanceToFirst <= (isActiveOrCompleted ? 40 : 25);
+                    distanceOk = distanceToFirst <= (hasPickupData ? 35 : 25);
                 }
             }
             
