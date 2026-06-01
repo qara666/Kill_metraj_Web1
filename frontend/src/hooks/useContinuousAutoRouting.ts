@@ -404,30 +404,28 @@ export function useContinuousAutoRouting() {
                                 points.push({ lat: sLat, lng: sLng });
                             }
 
-                            const sectorFilteredOrders: any[] = [];
                             chunkOrders.forEach((o: any) => {
                                 const oLat = safeNum(o.coords?.lat);
                                 const oLng = safeNum(o.coords?.lng);
                                 if (oLat !== null && oLng !== null) {
+                                    // Always include the point in the route distance calculation
+                                    points.push({ lat: oLat, lng: oLng });
+
                                     const isApproximate = ['APPROXIMATE_ZONE', 'APPROXIMATE_CITY'].includes(o.locationType || '');
                                     if (isApproximate) {
-                                        points.push({ lat: oLat, lng: oLng });
-                                        sectorFilteredOrders.push(o);
                                         return;
                                     }
+                                    
                                     const zoneInfo = robustGeocodingService.findZoneForCoords(oLat, oLng);
-                                    if (zoneInfo) {
-                                        points.push({ lat: oLat, lng: oLng });
-                                        sectorFilteredOrders.push(o);
-                                    } else {
+                                    if (!zoneInfo) {
                                         const ctx = robustGeocodingService.getZoneContext();
                                         if (ctx && (ctx.activePolygons?.length > 0 || ctx.allPolygons?.length > 0)) {
                                             o._kmlRejected = true;
-                                        } else {
-                                            points.push({ lat: oLat, lng: oLng });
-                                            sectorFilteredOrders.push(o);
+                                            newRoute.hasGeoErrors = true; // Flag the route as having an outlier
                                         }
                                     }
+                                } else {
+                                    newRoute.hasGeoErrors = true; // No coordinates at all
                                 }
                             });
 
@@ -439,12 +437,8 @@ export function useContinuousAutoRouting() {
                                 points.push(points[0]);
                             }
 
-                            if (sectorFilteredOrders.length === 0 && chunkOrders.length > 0) {
-                                newRoute.hasGeoErrors = true;
-                                newRoute.orders = [...chunkOrders];
-                            } else if (sectorFilteredOrders.length < chunkOrders.length) {
-                                newRoute.orders = [...sectorFilteredOrders];
-                            }
+                            // Keep ALL assigned orders in the route, never drop them
+                            newRoute.orders = [...chunkOrders];
 
                             if (points.length >= 2) {
                                 const uniquePoints = points.filter((p, i) =>
