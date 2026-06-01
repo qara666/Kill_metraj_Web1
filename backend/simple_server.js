@@ -915,7 +915,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
       // v38.2: setupPgNotify is now called inside the init block above
 
       
-      // Sequence of table checks
       const ensureTable = async (name, fn) => {
           try { await fn(); } catch (e) { logger.error(` [INIT] Failed to ensure table ${name}`, e); }
       };
@@ -929,6 +928,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
       await ensureTable('KmlHubs', ensureKmlHubsTable);
       await ensureTable('KmlZones', ensureKmlZonesTable);
       await ensureTable('DashboardCacheV2', ensureDashboardCacheV2);
+      await ensureTable('DashboardDivisionStates', ensureDashboardDivisionStatesTable);
       
       // Clear geo cache to get rid of bad coordinates
       try {
@@ -1389,6 +1389,29 @@ async function ensureRoutesTable() {
     logger.info('DB Check: calculated_routes table verified/created with indexes');
   } catch (err) {
     logger.error('DB Check: Error creating calculated_routes table', { error: err.message });
+  }
+}
+
+/**
+ * Ensure dashboard_division_states table exists
+ */
+async function ensureDashboardDivisionStatesTable() {
+  try {
+    logger.info('DB Check: Ensuring dashboard_division_states table exists...');
+    await sequelize.query(`
+      CREATE TABLE IF NOT EXISTS dashboard_division_states (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        division_id VARCHAR(50) NOT NULL,
+        date DATE NOT NULL,
+        is_active BOOLEAN DEFAULT TRUE,
+        data JSONB DEFAULT '{}',
+        last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+    logger.info('DB Check: dashboard_division_states table verified/created');
+  } catch (err) {
+    logger.error('DB Check: Error creating dashboard_division_states table', { error: err.message });
   }
 }
 
