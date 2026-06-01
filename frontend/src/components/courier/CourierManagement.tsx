@@ -434,6 +434,33 @@ const getCourierStats = useCallback((name: string) => {
     return { byCourier, total: unc.length };
   }, [excelData?.uncalculatedOrders]);
 
+  // v41: MASSIVE BACKGROUND AUTO-CALCULATION FOR ALL COURIERS
+  const autoCalcTriggered = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const uncalcEntries = Object.entries(uncalculatedOrders.byCourier);
+    if (uncalcEntries.length === 0) return;
+    
+    let timeout = 0;
+    for (const [courierName, orders] of uncalcEntries) {
+      const ordersArray = orders as any[];
+      if (!ordersArray || ordersArray.length === 0) continue;
+      
+      const orderIds = ordersArray.map(o => getStableOrderId(o)).sort().join(',');
+      const triggerKey = `${courierName}_${orderIds}`;
+      
+      if (!autoCalcTriggered.current.has(triggerKey)) {
+        autoCalcTriggered.current.add(triggerKey);
+        setTimeout(() => {
+          console.log(`[Mass AutoCalc] Triggering background frontend calculation for ${courierName}`);
+          window.dispatchEvent(new CustomEvent('km-force-auto-routing', { 
+            detail: { courierName, mode: 'frontend' } 
+          }));
+        }, timeout);
+        timeout += 800; // Stagger slightly to maintain 60fps and avoid rate limits
+      }
+    }
+  }, [uncalculatedOrders.byCourier]);
+
   return (
     <div className="space-y-0 hud-grid min-h-screen">
       <DashboardHeader

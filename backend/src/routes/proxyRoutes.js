@@ -33,7 +33,7 @@ router.get('/kml', async (req, res) => {
             code: error.code,
             status: error.response?.status
         });
-        res.status(500).json({
+        res.status(200).json({
             success: false,
             error: 'Не удалось получить KML',
             details: error.message
