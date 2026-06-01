@@ -336,9 +336,11 @@ export const useRouteGeocoding = ({
             const orderUpdates: any[] = [];
             const waypointLocs: any[] = [];
 
-            // FAST-PATH: If all orders have coordinates and we aren't confirming addresses,
-            // we can map them instantly without any yields or geocoding logic.
-            if (allOrdersHaveCoords && !confirmAddresses) {
+            // FAST-PATH: If all orders have coordinates, skip geocoding entirely.
+            // In turbo_instant mode this always triggers (ignores confirmAddresses).
+            const routingProviderEarly = settings.routingProvider || 'turbo_instant';
+            const isTurboInstant = routingProviderEarly === 'turbo_instant';
+            if (allOrdersHaveCoords && (!confirmAddresses || isTurboInstant)) {
                 route.orders.forEach(order => {
                     const loc = { lat: order.coords!.lat, lng: order.coords!.lng };
                     
@@ -760,39 +762,44 @@ export const useRouteGeocoding = ({
 
                 const yapikoUrl = (settings.yapikoOsrmUrl || '').trim()
 
-                //  УЛЬТРА ТУРБО: Запустить ВСЕ провайдеры для МАКСИМАЛЬНОГО качества + скорости
-                // Uses all 3 providers in parallel - first valid result wins
-                // Quality: Yapiko > Valhalla > OSRM (Yapiko is most accurate for UA)
-                const raceResults = await Promise.allSettled([
-                    // 1. Yapiko OSRM (custom local server) - BEST quality if available
-                    yapikoUrl ? (async () => {
+                //  УЛЬТРА ТУРБО v2: Promise.any — первый валидный результат немедленно
+                // Yapiko > Valhalla > OSRM запущены ПАРАЛЛЕЛЬНО, берём первого победителя.
+                // Если все упали — Haversine fallback (всегда работает).
+                const makeRacer = (fn: () => Promise<any>) => fn().catch(() => Promise.reject('failed'));
+
+                const racers: Promise<any>[] = [];
+                if (yapikoUrl) {
+                    racers.push(makeRacer(async () => {
                         const { RobustRoutingService } = await import('../services/RobustRoutingService')
                         const r = await RobustRoutingService.calculateRoute(turboPoints)
-                        if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Yapiko', quality: 3 }
-                        throw new Error('Yapiko failed')
-                    })() : Promise.reject('No Yapiko URL'),
+                        if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Yapiko' }
+                        throw new Error('empty')
+                    }));
+                }
+                racers.push(makeRacer(async () => {
+                    const { ValhallaService } = await import('../services/valhallaService')
+                    const r = await ValhallaService.calculateRoute(turboPoints)
+                    if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Valhalla' }
+                    throw new Error('empty')
+                }));
+                racers.push(makeRacer(async () => {
+                    const { OSRMService } = await import('../services/osrmService')
+                    const r = await OSRMService.calculateRoute(turboPoints)
+                    if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'OSRM' }
+                    throw new Error('empty')
+                }));
 
-                    // 2. Valhalla (высокое качество, средняя скорость)
-                    (async () => {
-                        const { ValhallaService } = await import('../services/valhallaService')
-                        const r = await ValhallaService.calculateRoute(turboPoints)
-                        if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Valhalla', quality: 2 }
-                        throw new Error('Valhalla failed')
-                    })(),
+                // Haversine всегда доступен — добавляем с задержкой 200ms чтобы дать шанс сетевым
+                racers.push(new Promise(resolve => setTimeout(() => {
+                    let h = 0;
+                    for (let i = 0; i < turboPoints.length - 1; i++) {
+                        h += haversineDistance(turboPoints[i].lat, turboPoints[i].lng, turboPoints[i+1].lat, turboPoints[i+1].lng);
+                    }
+                    resolve({ dist: Math.round(h * 1.3), dur: Math.round((h * 1.3 / 1000) / 0.5 * 60), src: 'Haversine' });
+                }, 200)));
 
-                    // 3. OSRM (быстрый запасной вариант)
-                    (async () => {
-                        const { OSRMService } = await import('../services/osrmService')
-                        const r = await OSRMService.calculateRoute(turboPoints)
-                        if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'OSRM', quality: 1 }
-                        throw new Error('OSRM failed')
-                    })(),
-                ])
-
-                // Find the best result (highest quality provider that succeeded)
-                const winner = raceResults
-                    .filter((r): r is PromiseFulfilledResult<any> => r.status === 'fulfilled')
-                    .sort((a, b) => (b.value.quality || 0) - (a.value.quality || 0))[0]
+                const winnerResult = await Promise.any(racers).catch(() => null);
+                const winner = winnerResult ? { value: winnerResult } : null;
 
                 if (winner) {
                     const totalDistance = winner.value.dist

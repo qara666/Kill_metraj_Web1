@@ -456,7 +456,8 @@ app.get('/api/proxy/geocoding', async (req, res) => {
            features: [] 
          });
        }
-       return res.status(status).json({ error: 'Proxy request failed', message: error.message });
+       res.setHeader('X-Geocode-Error', 'Proxy-Failure');
+       return res.status(200).json([]);
     }
   }
 
@@ -678,8 +679,8 @@ app.post('/api/proxy/routing', async (req, res) => {
     res.setHeader('X-RoutingCache', 'MISS');
     res.json(response.data);
   } catch (error) {
-    const status = error.response?.status || 500;
-    res.status(status).json({ error: 'Routing proxy failed', message: error.message });
+    logger.warn('POST routing proxy failed', { error: error.message });
+    res.status(200).json({ feasible: false, error: 'Routing proxy failed', message: error.message });
   }
 });
 
@@ -707,8 +708,8 @@ app.get('/api/proxy/routing', async (req, res) => {
     res.setHeader('X-RoutingCache', 'MISS');
     res.json(response.data);
   } catch (error) {
-    const status = error.response?.status || 500;
-    res.status(status).json({ error: 'Routing proxy failed', message: error.message });
+    logger.warn('GET routing proxy failed', { url, error: error.message });
+    res.status(200).json({ feasible: false, error: 'Routing proxy failed', message: error.message });
   }
 });
 
