@@ -13,6 +13,7 @@
  */
 
 import { localStorageUtils } from '../utils/ui/localStorage'
+import { API_URL } from '../config/apiConfig'
 
 export type ValhallaCostingModel = 'auto' | 'motorcycle' | 'motor_scooter' | 'pedestrian' | 'bicycle'
 
@@ -68,30 +69,9 @@ export class ValhallaService {
     }
   }
 
-  private static getBackendBaseUrl(): string | null {
-    if (typeof window === 'undefined') return null;
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return `${protocol}//${hostname}:5001`; // Default dev backend port
-    }
-
-    if (hostname.includes('onrender.com')) {
-      if (hostname === 'yapiko-auto-km-frontend-live.onrender.com') {
-        return 'https://yapiko-auto-km-backend.onrender.com';
-      }
-      return `https://${hostname.replace('frontend', 'backend')}`;
-    }
-    return null;
-  }
-
   private static getMaybeProxiedUrl(targetUrl: string): string {
-    const backendBase = this.getBackendBaseUrl();
-    if (backendBase) {
-      return `${backendBase}/api/proxy/routing?url=${encodeURIComponent(targetUrl)}`;
-    }
-    return targetUrl;
+    const cleanBase = API_URL.replace(/\/+$/, '');
+    return `${cleanBase}/api/proxy/routing?url=${encodeURIComponent(targetUrl)}`;
   }
 
   /**
@@ -146,9 +126,8 @@ export class ValhallaService {
     const finalUrl = this.getMaybeProxiedUrl(targetUrl);
 
     try {
-      const { API_URL } = await import('../config/apiConfig')
       const targetUrl = `${VALHALLA_BASE_URL}/route`
-      const proxyUrl = `${API_URL}/api/proxy/valhalla?url=${encodeURIComponent(targetUrl)}`
+      const proxyUrl = `${API_URL.replace(/\/+$/, '')}/api/proxy/valhalla?url=${encodeURIComponent(targetUrl)}`
 
       const response = await fetch(proxyUrl, {
         method: 'POST',

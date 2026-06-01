@@ -47,7 +47,7 @@ import {
 } from '@heroicons/react/24/outline'
 import { clsx } from 'clsx'
 import { LeafletCourierMap } from './LeafletCourierMap'
-import { YapikoOSRMService } from '../../services/YapikoOSRMService'
+import { RobustRoutingService } from '../../services/RobustRoutingService'
 import { localStorageUtils } from '../../utils/ui/localStorage'
 import { toast } from 'react-hot-toast'
 import { API_URL } from '../../config/apiConfig'
@@ -399,7 +399,7 @@ export const DistanceDetailModal: React.FC<DistanceDetailModalProps> = ({ isOpen
       if (!validOrders.length) return { ...r, totalDistance: 0, geometry: undefined };
       const waypoints = validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng });
       const locs = [start, ...waypoints, end];
-      const res = await YapikoOSRMService.calculateRoute(locs, osrmUrl);
+      const res = await RobustRoutingService.calculateRoute(locs);
       const geoMeta = { origin: { lat: start.lat, lng: start.lng }, destination: { lat: end.lat, lng: end.lng }, waypoints };
       return { ...r, totalDistance: (res.feasible && res.totalDistance != null) ? res.totalDistance / 1000 : 0, geometry: res.geometry, geoMeta };
     };
@@ -482,7 +482,7 @@ const handleDrop = useCallback((e: React.DragEvent, toRouteId: string) => {
           if (!validOrders.length) return { ...r, totalDistance: 0, geometry: undefined };
           const waypoints = validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng });
           const locs = [start, ...waypoints, end];
-          const res = await YapikoOSRMService.calculateRoute(locs, osrmUrl);
+          const res = await RobustRoutingService.calculateRoute(locs);
           const geoMeta = { origin: { lat: start.lat, lng: start.lng }, destination: { lat: end.lat, lng: end.lng }, waypoints };
           return { ...r, totalDistance: (res.feasible && res.totalDistance != null) ? res.totalDistance / 1000 : 0, geometry: res.geometry, geoMeta };
         };
@@ -537,7 +537,7 @@ const handleManualRecalcAll = useCallback(async () => {
           if (!validOrders.length) return { ...r, totalDistance: 0, geometry: undefined };
           const waypoints = validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng });
           const locs = [start, ...waypoints, end];
-          const res = await YapikoOSRMService.calculateRoute(locs, osrmUrl);
+          const res = await RobustRoutingService.calculateRoute(locs);
           const geoMeta = { origin: { lat: start.lat, lng: start.lng }, destination: { lat: end.lat, lng: end.lng }, waypoints };
           return { ...r, totalDistance: (res.feasible && res.totalDistance != null) ? res.totalDistance / 1000 : 0, geometry: res.geometry, geoMeta };
         };
@@ -640,7 +640,7 @@ const handleManualRecalcAll = useCallback(async () => {
         if (!validOrders.length && start.lat === end.lat && start.lng === end.lng) return r;
         const locs = [start, ...validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng }), end];
         try {
-          const res = await YapikoOSRMService.calculateRoute(locs, osrmUrl);
+          const res = await RobustRoutingService.calculateRoute(locs);
           if (res.feasible && res.geometry) {
             return { ...r, geometry: res.geometry, totalDistance: res.totalDistance != null ? res.totalDistance / 1000 : r.totalDistance };
           }

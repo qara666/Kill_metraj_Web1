@@ -21,7 +21,7 @@ import { AddressEditModal } from '../modals/AddressEditModal'
 import { EliteCourierCard } from './EliteCourierCard'
 import DistanceDetailModal from './DistanceDetailModal'
 import { API_URL } from '../../config/apiConfig'
-import { YapikoOSRMService } from '../../services/YapikoOSRMService'
+import { RobustRoutingService } from '../../services/RobustRoutingService'
 
 // v9.3: HUD РЕМОНТА ГЕО-ОШИБОК (СТАБИЛЬНЫЙ)
 // Добавлен AddressEditModal, аддитивная логика дистанции и кликабельные оповещения
@@ -386,7 +386,7 @@ const getCourierStats = useCallback((name: string) => {
 
         if (validOrders.length > 0) {
             const waypoints = validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng });
-            const res = await YapikoOSRMService.calculateRoute([start, ...waypoints, end], osrmUrl);
+            const res = await RobustRoutingService.calculateRoute([start, ...waypoints, end]);
             if (res.feasible && res.totalDistance != null) {
                 newKm = res.totalDistance / 1000;
                 newDuration = Math.round((res.totalDuration || 0) / 60);

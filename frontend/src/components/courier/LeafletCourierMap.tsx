@@ -4,7 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { clsx } from 'clsx';
 import { localStorageUtils } from '../../utils/ui/localStorage';
-import { YapikoOSRMService } from '../../services/YapikoOSRMService';
+import { RobustRoutingService } from '../../services/RobustRoutingService';
 
 const decodePolyline = (str: string, precision = 5) => {
     let index = 0, lat = 0, lng = 0, coordinates = [], shift = 0, result = 0, byte = null, lat_change, lng_change, factor = Math.pow(10, precision);
@@ -225,7 +225,7 @@ const RouteLayer = memo(({ route, color, index, isAnimating, showLabels }: { rou
                 });
                 if (!validOrders.length && start.lat === end.lat && start.lng === end.lng) return;
                 const locs = [start, ...validOrders.map((o: any) => o.coords || { lat: o.lat, lng: o.lng }), end];
-                const res = await YapikoOSRMService.calculateRoute(locs, osrmUrl);
+                const res = await RobustRoutingService.calculateRoute(locs);
                 if (res.feasible && res.geometry) setGeometry(decodePolyline(res.geometry) as [number, number][]);
             } catch (e) { }
         };

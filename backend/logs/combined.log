@@ -17,3 +17,7 @@
 {"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:30:28"}
 {"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:32:28"}
 {"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:34:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:36:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:38:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:40:28"}
+{"level":"info","message":"[SelfHostHealth]  Status: osrm=false, valhalla=false, nominatim=false","service":"kill-metraj-backend","timestamp":"2026-06-01 19:42:28"}

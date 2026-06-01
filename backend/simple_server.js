@@ -447,7 +447,16 @@ app.get('/api/proxy/geocoding', async (req, res) => {
       res.setHeader('X-Geocache', 'DEDUP');
       return res.json(data);
     } catch (error) {
-       return res.status(error.response?.status || 500).json({ error: 'Proxy request failed', message: error.message });
+       const status = error.response?.status || 500;
+       if (status === 429) {
+         return res.status(200).json({ 
+           status: 'rate_limit_backoff', 
+           message: 'Provider is busy, try again later',
+           error: true,
+           features: [] 
+         });
+       }
+       return res.status(status).json({ error: 'Proxy request failed', message: error.message });
     }
   }
 

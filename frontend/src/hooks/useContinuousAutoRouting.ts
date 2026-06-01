@@ -9,7 +9,7 @@ import { useDashboardStore } from '../stores/useDashboardStore';
 import { getStableOrderId } from '../utils/data/orderId';
 import { normalizeDateToIso } from '../utils/data/dateUtils';
 import { needsAddressClarification } from '../utils/data/addressUtils';
-import { YapikoOSRMService } from '../services/YapikoOSRMService';
+import { RobustRoutingService } from '../services/RobustRoutingService';
 import { ValhallaService } from '../services/valhallaService';
 import { calculateDistance } from '../utils/geoUtils';
 import { useRouteCalculationStore } from '../stores/useRouteCalculationStore';
@@ -503,7 +503,7 @@ export function useContinuousAutoRouting() {
                                         try {
                                             const yapikoUrl = settings.yapikoOsrmUrl.trim();
                                             console.debug(`[AutoRoute] Yapiko запрос (${actualCourierName}): ${routePoints.length} точек`);
-                                            const r = await YapikoOSRMService.calculateRoute(routePoints, yapikoUrl);
+                                            const r = await RobustRoutingService.calculateRoute(routePoints);
                                             if (r.feasible) {
                                                 dist = r.totalDistance || 0;
                                                 dur = r.totalDuration || 0;

@@ -766,8 +766,8 @@ export const useRouteGeocoding = ({
                 const raceResults = await Promise.allSettled([
                     // 1. Yapiko OSRM (custom local server) - BEST quality if available
                     yapikoUrl ? (async () => {
-                        const { YapikoOSRMService } = await import('../services/YapikoOSRMService')
-                        const r = await YapikoOSRMService.calculateRoute(turboPoints, yapikoUrl)
+                        const { RobustRoutingService } = await import('../services/RobustRoutingService')
+                        const r = await RobustRoutingService.calculateRoute(turboPoints)
                         if (r.feasible && (r.totalDistance ?? 0) > 0) return { dist: r.totalDistance ?? 0, dur: r.totalDuration ?? 0, src: 'Yapiko', quality: 3 }
                         throw new Error('Yapiko failed')
                     })() : Promise.reject('No Yapiko URL'),
@@ -870,8 +870,8 @@ export const useRouteGeocoding = ({
 
             if (routingProvider === 'yapiko_osrm' && yapikoUrl) {
                 try {
-                    const { YapikoOSRMService } = await import('../services/YapikoOSRMService')
-                    const yRes = await YapikoOSRMService.calculateRoute(points, yapikoUrl)
+                    const { RobustRoutingService } = await import('../services/RobustRoutingService')
+                    const yRes = await RobustRoutingService.calculateRoute(points)
                     if (yRes.feasible && yRes.totalDistance && yRes.totalDistance > 0) {
                         totalDistance = yRes.totalDistance
                         totalDuration = yRes.totalDuration || 0

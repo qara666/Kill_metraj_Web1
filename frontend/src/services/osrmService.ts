@@ -20,32 +20,12 @@ export interface OSRMRouteResult {
 }
 
 const OSRM_BASE_URL = 'https://router.project-osrm.org'
+import { API_URL } from '../config/apiConfig'
 
 export class OSRMService {
-  private static getBackendBaseUrl(): string | null {
-    if (typeof window === 'undefined') return null;
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return `${protocol}//${hostname}:5001`; // Default dev backend port
-    }
-
-    if (hostname.includes('onrender.com')) {
-      if (hostname === 'yapiko-auto-km-frontend-live.onrender.com') {
-        return 'https://yapiko-auto-km-backend.onrender.com';
-      }
-      return `https://${hostname.replace('frontend', 'backend')}`;
-    }
-    return null;
-  }
-
   private static getMaybeProxiedUrl(targetUrl: string): string {
-    const backendBase = this.getBackendBaseUrl();
-    if (backendBase) {
-      return `${backendBase}/api/proxy/routing?url=${encodeURIComponent(targetUrl)}`;
-    }
-    return targetUrl;
+    const cleanBase = API_URL.replace(/\/+$/, '');
+    return `${cleanBase}/api/proxy/routing?url=${encodeURIComponent(targetUrl)}`;
   }
 
   /**
