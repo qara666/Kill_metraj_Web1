@@ -83,7 +83,10 @@ services:
       - key: NODE_OPTIONS
         value: "--max-old-space-size=4096"
       - key: VITE_API_URL
-        sync: false
+        fromService:
+          type: web
+          name: yapiko-auto-km-backend
+          envVarKey: RENDER_EXTERNAL_URL
 
   # Redis Service
   - type: redis
