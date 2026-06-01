@@ -408,11 +408,9 @@ export function useContinuousAutoRouting() {
                                 const oLat = safeNum(o.coords?.lat);
                                 const oLng = safeNum(o.coords?.lng);
                                 if (oLat !== null && oLng !== null) {
-                                    // Always include the point in the route distance calculation
-                                    points.push({ lat: oLat, lng: oLng });
-
                                     const isApproximate = ['APPROXIMATE_ZONE', 'APPROXIMATE_CITY'].includes(o.locationType || '');
                                     if (isApproximate) {
+                                        points.push({ lat: oLat, lng: oLng });
                                         return;
                                     }
                                     
@@ -422,7 +420,14 @@ export function useContinuousAutoRouting() {
                                         if (ctx && (ctx.activePolygons?.length > 0 || ctx.allPolygons?.length > 0)) {
                                             o._kmlRejected = true;
                                             newRoute.hasGeoErrors = true; // Flag the route as having an outlier
+                                            // 🚨 СКИПАЕМ аномальную координату, чтобы она не сломала километраж (не пушим в points)
+                                        } else {
+                                            // Нет активных зон, доверяем координате
+                                            points.push({ lat: oLat, lng: oLng });
                                         }
+                                    } else {
+                                        // Координата внутри зоны, всё ок
+                                        points.push({ lat: oLat, lng: oLng });
                                     }
                                 } else {
                                     newRoute.hasGeoErrors = true; // No coordinates at all
