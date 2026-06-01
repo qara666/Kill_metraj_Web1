@@ -11,6 +11,7 @@ import { needsAddressClarification } from '../utils/data/addressUtils';
 import { calculateDistance } from '../utils/geoUtils';
 import { useRouteCalculationStore } from '../stores/useRouteCalculationStore';
 import { API_URL } from '../config/apiConfig';
+import { haversineDistance } from '../utils/routes/routeOptimizationHelpers';
 
 // ─── Inline OSRM race — same logic as /map tab ─────────────────────────────
 type RaceResult = { dist: number; dur: number; eng: string; geometry?: string };
@@ -415,18 +416,31 @@ export function useContinuousAutoRouting() {
                                     }
                                     
                                     const zoneInfo = robustGeocodingService.findZoneForCoords(oLat, oLng);
+                                    let isAnomaly = false;
+                                    
                                     if (!zoneInfo) {
                                         const ctx = robustGeocodingService.getZoneContext();
                                         if (ctx && (ctx.activePolygons?.length > 0 || ctx.allPolygons?.length > 0)) {
                                             o._kmlRejected = true;
                                             newRoute.hasGeoErrors = true; // Flag the route as having an outlier
-                                            // 🚨 СКИПАЕМ аномальную координату, чтобы она не сломала километраж (не пушим в points)
-                                        } else {
-                                            // Нет активных зон, доверяем координате
-                                            points.push({ lat: oLat, lng: oLng });
+                                            
+                                            // Умная проверка: отличаем реальный "вылет" за зону (2-5 км) от бага геокодера (500+ км)
+                                            if (sLat !== null && sLng !== null) {
+                                                const distFromHub = haversineDistance(sLat, sLng, oLat, oLng) / 1000;
+                                                const maxAllowed = settings?.anomalyMaxLegDistanceKm || 25;
+                                                
+                                                if (distFromHub > maxAllowed) {
+                                                    isAnomaly = true;
+                                                    // Снапим кривую координату к Хабу, чтобы не сломать километраж и не отдалить карту
+                                                    o.coords = { lat: sLat, lng: sLng };
+                                                    points.push({ lat: sLat, lng: sLng });
+                                                }
+                                            }
                                         }
-                                    } else {
-                                        // Координата внутри зоны, всё ок
+                                    }
+                                    
+                                    if (!isAnomaly) {
+                                        // Координата адекватная (либо внутри зоны, либо недалеко вылетела). Доверяем ей!
                                         points.push({ lat: oLat, lng: oLng });
                                     }
                                 } else {
