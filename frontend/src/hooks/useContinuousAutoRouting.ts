@@ -187,14 +187,14 @@ export function useContinuousAutoRouting() {
                         courierNameKey === 'неназначенные' ||
                         courierNameKey === 'неизвестный курьер';
 
-                    for (const group of timeGroups) {
-                        const groupOrders = group.orders || [];
-                        if (groupOrders.length === 0) continue;
+                    if (isUnassigned) {
+                        for (const group of timeGroups) {
+                            const groupOrders = group.orders || [];
+                            if (groupOrders.length === 0) continue;
 
-                        const groupSignature = `${courierNameKey}|${group.windowLabel}|${groupOrders.map((o: any) => getStableOrderId(o)).sort().join(',')}`;
-                        if (processedGroupSignatures.current.has(groupSignature)) continue;
+                            const groupSignature = `${courierNameKey}|${group.windowLabel}|${groupOrders.map((o: any) => getStableOrderId(o)).sort().join(',')}`;
+                            if (processedGroupSignatures.current.has(groupSignature)) continue;
 
-                        if (isUnassigned) {
                             groupOrders.forEach(o => {
                                 const oid = getStableOrderId(o);
                                 if (oid && !o.coords?.lat && !seenSolo.has(oid)) {
@@ -202,14 +202,33 @@ export function useContinuousAutoRouting() {
                                     seenSolo.add(oid);
                                 }
                             });
-                        } else {
-                            routeTasks.push({
-                                actualCourierName: group.courierName,
-                                groupOrders,
-                                groupSignature,
-                                windowLabel: group.windowLabel
-                            });
                         }
+                    } else {
+                        // INNOVATION: For assigned couriers, we merge ALL time windows into ONE single massive route.
+                        // This mathematically guarantees that OSRM calculates it as exactly 1 trip (Hub -> All Orders -> Hub).
+                        // This perfectly matches the "Manual Calculation" (Рассчитать) and /map tab functionality,
+                        // completely eliminating the "duplicate km" discrepancy caused by multiple hub returns!
+                        const allOrders = timeGroups.flatMap(g => g.orders || []);
+                        if (allOrders.length === 0) continue;
+                        
+                        // Sort by planned time so OSRM receives them in logical initial order
+                        allOrders.sort((a, b) => {
+                            const tA = a.plannedTime || a.kitchenTime || a.arrivalTime || 0;
+                            const tB = b.plannedTime || b.kitchenTime || b.arrivalTime || 0;
+                            return (tA as number) - (tB as number);
+                        });
+                        
+                        const actualCourierName = timeGroups[0]?.courierName || courierNameKey;
+                        const groupSignature = `${courierNameKey}|AllDay|${allOrders.map((o: any) => getStableOrderId(o)).sort().join(',')}`;
+                        
+                        if (processedGroupSignatures.current.has(groupSignature)) continue;
+                        
+                        routeTasks.push({
+                            actualCourierName,
+                            groupOrders: allOrders,
+                            groupSignature,
+                            windowLabel: "Смена (Все заказы)"
+                        });
                     }
                 }
 
