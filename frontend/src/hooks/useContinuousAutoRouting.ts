@@ -287,8 +287,41 @@ export function useContinuousAutoRouting() {
                         return;
                     }
                     if (res?.best?.raw?.geometry?.location) {
+                        // INNOVATION: Smart KML Center Fallback
+                        // If geocoder returns city center (APPROXIMATE) or it's totally out of zone,
+                        // we snap it directly to the geographic center of the KML zone it belongs to!
+                        const locType = res.best.raw?.geometry?.location_type;
+                        const isBadGeo = res.best.hasGeoErrors || locType === 'GEOMETRIC_CENTER' || locType === 'APPROXIMATE';
+                        const orderZoneName = o.deliveryZone || o.kmlZone;
+                        const ctx = robustGeocodingService.getZoneContext();
+                        
+                        if (isBadGeo && orderZoneName && ctx?.activePolygons?.length) {
+                            const poly = ctx.activePolygons.find(p => p.name.toLowerCase() === orderZoneName.toLowerCase());
+                            if (poly) {
+                                let centerLat = NaN, centerLng = NaN;
+                                if (poly.bounds && typeof poly.bounds.getNorthEast === 'function') {
+                                    centerLat = (poly.bounds.getNorthEast().lat() + poly.bounds.getSouthWest().lat()) / 2;
+                                    centerLng = (poly.bounds.getNorthEast().lng() + poly.bounds.getSouthWest().lng()) / 2;
+                                } else if (poly.path && poly.path.length > 0) {
+                                    centerLat = poly.path.reduce((sum: number, p: any) => sum + (typeof p.lat === 'function' ? p.lat() : Number(p.lat)), 0) / poly.path.length;
+                                    centerLng = poly.path.reduce((sum: number, p: any) => sum + (typeof p.lng === 'function' ? p.lng() : Number(p.lng)), 0) / poly.path.length;
+                                }
+                                
+                                if (!isNaN(centerLat) && !isNaN(centerLng)) {
+                                    o.coords = { lat: centerLat, lng: centerLng };
+                                    o.kmlZone = poly.name;
+                                    o.kmlHub = poly.folderName;
+                                    o.locationType = 'KML_CENTER_FALLBACK';
+                                    o.geocodeScore = 0.5;
+                                    o.streetNumberMatched = false;
+                                    return; // Successfully snapped to KML center!
+                                }
+                            }
+                        }
+
+                        // Standard assignment
                         const loc = res.best.raw.geometry.location;
-                        o.coords = { lat: Number(loc.lat), lng: Number(loc.lng) };
+                        o.coords = { lat: Number(typeof loc.lat === 'function' ? loc.lat() : loc.lat), lng: Number(typeof loc.lng === 'function' ? loc.lng() : loc.lng) };
                         o.kmlZone = res.best.kmlZone || undefined;
                         o.kmlHub = res.best.kmlHub || undefined;
                         o.locationType = res.best.raw.geometry.location_type || undefined;

@@ -354,10 +354,12 @@ export function groupOrdersByTimeWindow(
     // 2. Группируем автоматические заказы
     ordersForAuto.forEach(({ order, planned, arrival, kitchen, anchorTime }) => {
         const isActiveOrCompleted = isAssignedCourier && isOrderActiveOrCompleted(order);
-        const effectiveWindowMs = isActiveOrCompleted ? (40 * 60 * 1000) : (arrivalProximityMinutes * 60 * 1000); // окно 40 мин для активных/завершённых
-        const deliverySpanMs = isActiveOrCompleted ? (120 * 60 * 1000) : (maxDeliverySpanMinutes * 60 * 1000); // span 2 часа для активных/завершённых
-
         
+        // INNOVATION: Для назначенного курьера мы ДРАСТИЧЕСКИ увеличиваем "окно", чтобы система 
+        // НЕ разбивала 3 заказа, которые курьер реально повез вместе, на два разных маршрута из-за таймингов.
+        // Если курьер везет их вместе, значит они в одном окне (до 3 часов разницы).
+        const effectiveWindowMs = isActiveOrCompleted ? (180 * 60 * 1000) : (arrivalProximityMinutes * 60 * 1000); 
+        const deliverySpanMs = isActiveOrCompleted ? (300 * 60 * 1000) : (maxDeliverySpanMinutes * 60 * 1000);         
         if (!currentGroup) {
             // Создаем новую группу для первого заказа
             currentGroup = createNewGroup(courierId, courierName, order, planned, arrival, groups.length, '');
@@ -398,8 +400,9 @@ export function groupOrdersByTimeWindow(
                     const maxDistFromCenter = calculateMaxDistanceFromCenter(allOrdersForCenter, center);
                     
                     // v7.x: Используем более мягкую из двух стратегий
-                    const MAX_CENTER_DISTANCE = 30; // км
-                    const MAX_FIRST_DISTANCE = 25; // км (немного увеличено с 20)
+                    // v7.x: Используем более мягкую из двух стратегий
+                    const MAX_CENTER_DISTANCE = isActiveOrCompleted ? 50 : 30; // км
+                    const MAX_FIRST_DISTANCE = isActiveOrCompleted ? 40 : 25; // км
                     
                     const centerBasedOk = maxDistFromCenter <= MAX_CENTER_DISTANCE;
                     const firstBasedOk = distanceToFirst <= MAX_FIRST_DISTANCE;
@@ -407,7 +410,7 @@ export function groupOrdersByTimeWindow(
                     distanceOk = centerBasedOk || firstBasedOk;
                 } else {
                     // Невозможно вычислить центр — используем исходную логику
-                    distanceOk = distanceToFirst <= 25;
+                    distanceOk = distanceToFirst <= (isActiveOrCompleted ? 40 : 25);
                 }
             }
             
