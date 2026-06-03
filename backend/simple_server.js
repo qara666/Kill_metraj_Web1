@@ -78,11 +78,21 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
     credentials: true
   },
-  transports: ['polling', 'websocket'],
+  transports: ['websocket', 'polling'], // websocket first — no polling upgrade overhead
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000,
-  connectTimeout: 45000
+  connectTimeout: 45000,
+  // v8.0 BANDWIDTH: Enable per-message deflate compression (~60% traffic reduction)
+  perMessageDeflate: {
+    threshold: 1024,         // only compress messages > 1KB
+    zlibDeflateOptions: { level: 6 }, // balanced speed/ratio
+    serverMaxWindowBits: 10,
+    concurrencyLimit: 10,
+    clientNoContextTakeover: true,
+    serverNoContextTakeover: true
+  },
+  maxHttpBufferSize: 2e6   // 2MB max message (was default 1MB but dashboard can be larger)
 });
 
 
@@ -174,14 +184,11 @@ async function setupPgNotify() {
 
           await cacheService.invalidateAll();
           
-          // Broadcast to WebSocket clients
-          const sockets = await io.fetchSockets();
-          for (const socketInstance of sockets) {
-            const socket = io.sockets.sockets.get(socketInstance.id);
-            if (socket?.user) {
-              socket.emit('dashboard_data_updated', { divisionId: notifyDivId });
-            }
-          }
+          // v8.0 BANDWIDTH: Room-targeted emit instead of iterating all sockets
+          // Only notify clients subscribed to this division (or admins in 'all' room)
+          const smallPayload = { divisionId: notifyDivId };
+          io.to(`div:${notifyDivId}`).emit('dashboard_data_updated', smallPayload);
+          io.to('div:all').emit('dashboard_data_updated', smallPayload); // admins always get it
         } catch (e) {
           logger.error(' [PG-NOTIFY] Parse error:', e.message);
         }
@@ -1496,23 +1503,34 @@ io.on('connection', (socket) => {
   const user = socket.user;
   logger.info(`Клиент подключен: ${socket.id} (Пользователь: ${user.username}, Подразделение: ${user.divisionId || 'ВСЕ'})`);
 
+  // v8.0 BANDWIDTH: Join division room for targeted emits (massive traffic reduction)
+  const userDivision = user.role === 'admin' ? 'all' : (user.divisionId || 'all');
+  socket.join(`div:${userDivision}`);
+  if (user.role === 'admin') socket.join('div:all');
+
   // Отслеживание подключения WebSocket в метриках
   trackWebSocketConnection('connect', user.divisionId, user.role);
 
   // Send latest dashboard data on connection
   GetDashboardDataQuery.execute({
-    divisionId: user.role === 'admin' ? 'all' : user.divisionId,
+    divisionId: userDivision,
     user
   }).then(result => {
     if (result) {
+      // v8.0 BANDWIDTH: Strip heavy fields not needed on connect (addresses, paymentMethods arrays)
+      const lightPayload = result.payload ? {
+        orders: result.payload.orders,
+        couriers: result.payload.couriers,
+        statistics: result.payload.statistics
+      } : null;
       socket.emit('dashboard:update', {
-        data: result.payload,
+        data: lightPayload,
         timestamp: result.created_at,
         status: result.status_code,
         source: 'on_connect',
-        divisionId: user.role === 'admin' ? 'all' : user.divisionId
+        divisionId: userDivision
       });
-      logger.info(`Отправлены начальные данные дашборда клиенту ${socket.id} (заказов: ${result.payload.orders?.length || 0})`);
+      logger.info(`Отправлены начальные данные дашборда клиенту ${socket.id} (заказов: ${result.payload?.orders?.length || 0})`);
     }
   }).catch(error => {
     logger.error('Ошибка при отправке начальных данных дашборда:', error);

@@ -762,7 +762,10 @@ class OrderCalculator {
                     totalOrdersAll: totalAll,
                     processedCount: 0
                 };
-                if (this.io) this.io.emit('robot_status', initStatus);
+                // v8.0 BANDWIDTH: Room-targeted emit
+                if (this.io) {
+                    this.io.to(`div:${divIdStr}`).to('div:all').emit('robot_status', initStatus);
+                }
                 if (global.divisionStatusStore) {
                     global.divisionStatusStore[`${divIdStr}_${targetDate}`] = initStatus;
                 }
@@ -878,7 +881,8 @@ class OrderCalculator {
 
             // Отправка статуса остановки
             if (this.io) {
-                this.io.emit('robot_status', {
+                // v8.0 BANDWIDTH: Room-targeted emit
+                this.io.to(`div:${divisionId}`).to('div:all').emit('robot_status', {
                     divisionId,
                     isActive: false,
                     message: 'Robot stopped by user',
@@ -911,6 +915,7 @@ class OrderCalculator {
 
             // Отправка статуса остановки
             if (this.io) {
+                // v8.0 BANDWIDTH: Global stop — broadcast to all (no specific room)
                 this.io.emit('robot_status', {
                     isActive: false,
                     message: 'Robot stopped globally',
@@ -1172,7 +1177,8 @@ class OrderCalculator {
                       logger.warn('[TurboCalculator] Failed to seed empty DashboardCache:', seedErr.message);
                     }
                 if (this.io) {
-                    this.io.emit('robot_status', {
+                    const room = priorityDivisionId === 'all' ? 'div:all' : `div:${priorityDivisionId}`;
+                    this.io.to(room).to('div:all').emit('robot_status', {
                         divisionId: priorityDivisionId,
                         date: dateISO,
                         isActive: false,
@@ -1195,8 +1201,9 @@ class OrderCalculator {
                         totalCount: 0,
                         message: 'No data for this date'
                     };
-                    this.io.emit('robot_status', noDataPayload);
-                    this.io.emit('division_status_update', noDataPayload);
+                    const room = priorityDivisionId === 'all' ? 'div:all' : `div:${priorityDivisionId}`;
+                    this.io.to(room).to('div:all').emit('robot_status', noDataPayload);
+                    this.io.to(room).to('div:all').emit('division_status_update', noDataPayload);
                 }
                 return;
             }
@@ -1252,7 +1259,8 @@ class OrderCalculator {
             if (priorityDivisionId !== 'all') {
                 this.globalStats = null;
                 if (this.io && priorityDivisionId) {
-                    this.io.emit('robot_status', {
+                    const room = `div:${priorityDivisionId}`;
+                    this.io.to(room).to('div:all').emit('robot_status', {
                         divisionId: priorityDivisionId,
                         date: dateISO,
                         isActive: true,
@@ -1338,7 +1346,8 @@ class OrderCalculator {
                 if (!this.io) return;
                 const now = Date.now();
                 const lastEmit = this.lastEmitTimeByKey?.get(statusKey) || 0;
-                if (!force && lastEmit && (now - lastEmit < 1000)) return;
+                // v8.0 BANDWIDTH: Increased throttle 1s→2s to halve robot_status emit count
+                if (!force && lastEmit && (now - lastEmit < 2000)) return;
                 if (this.lastEmitTimeByKey) this.lastEmitTimeByKey.set(statusKey, now);
 
                 // Построение couriersSummary (источник истины для EliteCourierCard)
@@ -1385,8 +1394,10 @@ class OrderCalculator {
                 if (this.divisionStatus) this.divisionStatus.set(statusKey, payload);
                 if (global.divisionStatusStore) global.divisionStatusStore[statusKey] = payload;
 
-                this.io.emit('robot_status', payload);
-                this.io.emit('division_status_update', payload);
+                // v8.0 BANDWIDTH: Room-targeted emit — only division members + admins receive this
+                const divRoom = `div:${divIdStr}`;
+                this.io.to(divRoom).to('div:all').emit('robot_status', payload);
+                this.io.to(divRoom).to('div:all').emit('division_status_update', payload);
             };
 
             // v37.0: НЕМЕДЛЕННЫЙ ВЫПУСК для пробуждения UI
@@ -2248,7 +2259,9 @@ class OrderCalculator {
                         return c.distanceKm > 0 || c.ordersInRoutes > 0;
                     });
 
-                    this.io.emit('routes_update', {
+                    // v8.0 BANDWIDTH: Room-targeted emit — only send to sockets in this division room
+                    const divRoom = `div:${cache.division_id}`;
+                    this.io.to(divRoom).to('div:all').emit('routes_update', {
                         divisionId: cache.division_id,
                         date: targetDateNorm || cache.target_date,
                         couriers: enrichedCouriers,
