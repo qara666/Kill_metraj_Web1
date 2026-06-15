@@ -75,9 +75,6 @@ class DashboardConsumer {
      */
     async handleDashboardUpdate(event) {
         try {
-            // Структура события Debezium после трансформаExtractNewRecordState
-            // событие = { id, payload, data_hash, status_code, created_at }
-
             if (!event || !event.payload) {
                 logger.warn('Получено неверное событие CDC:', event);
                 return;
@@ -88,47 +85,63 @@ class DashboardConsumer {
                 status_code: event.status_code
             });
 
-            // Сброс всего кэша
             await cacheService.invalidateAll();
             logger.debug('Кэш сброшен из-за события CDC');
 
-            // Рассылка WebSocket-клиентам с фильтрацией
+            // v8.1 BANDWIDTH: Room-based targeted emits instead of O(N socket) iteration.
+            // Collect unique divisionIds from connected sockets, then send ONE filtered
+            // payload per division room instead of one per socket.
             const sockets = await this.io.fetchSockets();
-
             if (sockets.length === 0) {
                 logger.debug('Нет подключенных WebSocket-клиентов, пропуск рассылки');
                 return;
             }
 
+            const fullPayload = event.payload;
+            const divisionsSeen = new Set();
+
             for (const socketInstance of sockets) {
                 const socket = this.io.sockets.sockets.get(socketInstance.id);
                 if (!socket || !socket.user) continue;
-
                 const user = socket.user;
-                let payload = event.payload;
 
-                // Фильтрация по подразделению
-                if (user.role !== 'admin' && user.divisionId) {
-                    payload = {
-                        ...payload,
-                        orders: (payload.orders || []).filter(
-                            o => String(o.departmentId) === String(user.divisionId)
-                        ),
-                        couriers: (payload.couriers || []).filter(
-                            c => String(c.departmentId) === String(user.divisionId)
-                        )
-                    };
+                if (user.role === 'admin') {
+                    // Admin gets full payload — sent once via 'div:all' room below
+                    continue;
                 }
 
-                socket.emit('dashboard:update', {
-                    data: payload,
+                const divId = String(user.divisionId || '');
+                if (!divId || divisionsSeen.has(divId)) continue;
+                divisionsSeen.add(divId);
+
+                // Filter payload to this division only
+                const divPayload = {
+                    ...fullPayload,
+                    orders: (fullPayload.orders || []).filter(
+                        o => String(o.departmentId) === divId
+                    ),
+                    couriers: (fullPayload.couriers || []).filter(
+                        c => String(c.departmentId) === divId
+                    )
+                };
+
+                this.io.to(`div:${divId}`).emit('dashboard:update', {
+                    data: divPayload,
                     timestamp: event.created_at,
                     status: event.status_code,
                     source: 'cdc'
                 });
             }
 
-            logger.info(`Обновление CDC разослано ${sockets.length} клиентам`);
+            // Send full payload to admins (div:all room)
+            this.io.to('div:all').emit('dashboard:update', {
+                data: fullPayload,
+                timestamp: event.created_at,
+                status: event.status_code,
+                source: 'cdc'
+            });
+
+            logger.info(`Обновление CDC разослано: ${divisionsSeen.size} отделов + admins`);
         } catch (error) {
             logger.error('Ошибка обработки обновления дашборда:', error);
         }

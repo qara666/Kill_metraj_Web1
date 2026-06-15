@@ -1241,7 +1241,8 @@ class OrderCalculator {
                 };
 
                 if (this.io) {
-                    this.io.emit('robot_status', this.globalStats);
+                    // v8.1 BANDWIDTH: Admins in 'div:all' room get global stats
+                    this.io.to('div:all').emit('robot_status', this.globalStats);
                 }
             }
 
@@ -2212,11 +2213,43 @@ class OrderCalculator {
             // v31.2: Мгновенные обновления UI! Извлечение логии отправки маршрутов во вспомогательную функцию
             // v36.9: Добавлен троттлинг для частичных отправок маршрутов
             let lastRouteEmitTime = 0;
+            // v8.1 BANDWIDTH: Slim order objects for WS transmission only (~75% payload reduction)
+            const slimOrderForWS = (o) => ({
+                id: o.id,
+                orderNumber: o.orderNumber,
+                address: o.address,
+                courier: o.courier,
+                lat: o.lat || o.coords?.lat,
+                lng: o.lng || o.coords?.lng,
+                plannedTime: o.plannedTime,
+                status: o.status,
+                manualGroupId: o.manualGroupId || null,
+            });
+
+            const slimRouteForWS = (r) => ({
+                id: r.id,
+                courier: r.courier,
+                courier_id: r.courier_id,
+                totalDistance: r.totalDistance,
+                totalDuration: r.totalDuration,
+                ordersCount: r.ordersCount || r.orders_count,
+                timeBlock: r.timeBlock,
+                startAddress: r.startAddress,
+                endAddress: r.endAddress,
+                isOptimized: r.isOptimized,
+                isTurboRoute: r.isTurboRoute,
+                isManuallyAdjusted: r.isManuallyAdjusted,
+                isCalculated: r.isCalculated,
+                orders: (r.orders || []).map(slimOrderForWS),
+            });
+
             const emitCurrentRoutes = async (force = false) => {
                 if (!this.io) return;
                 
                 const now = Date.now();
-                if (!force && now - lastRouteEmitTime < 2000) return; // 2с троттлинг для частичных
+                // v8.1 BANDWIDTH: Increased throttle 2s→15s for intermediate emits
+                // Final call always uses force=true so UX is not affected
+                if (!force && now - lastRouteEmitTime < 15000) return;
                 lastRouteEmitTime = now;
 
                 try {
@@ -2235,7 +2268,6 @@ class OrderCalculator {
                             address: e.address,
                             errorType: e.errorType || 'not_found',
                             reason: e.reason || '',
-                            kmlRejectedCoords: e.kmlRejectedCoords || null,
                         });
                     });
 
@@ -2259,17 +2291,20 @@ class OrderCalculator {
                         return c.distanceKm > 0 || c.ordersInRoutes > 0;
                     });
 
-                    // v8.0 BANDWIDTH: Room-targeted emit — only send to sockets in this division room
+                    // v8.1 BANDWIDTH: Room-targeted emit + slim routes (strips heavy order fields)
                     const divRoom = `div:${cache.division_id}`;
                     this.io.to(divRoom).to('div:all').emit('routes_update', {
                         divisionId: cache.division_id,
                         date: targetDateNorm || cache.target_date,
                         couriers: enrichedCouriers,
                         timeBlocks: allWindowLabels,
-                        routes: inMemoryFrontendRoutes,
-                        geoErrorOrders: stats.geoErrors || [],
-                        // v41: Полная диагностика конвейера для frontend
-                        uncalculatedOrders: stats.uncalculatedOrders || [],
+                        routes: inMemoryFrontendRoutes.map(slimRouteForWS),
+                        geoErrorOrders: (stats.geoErrors || []).map(e => ({
+                            orderNumber: e.orderNumber, address: e.address, errorType: e.errorType || 'not_found'
+                        })),
+                        uncalculatedOrders: (stats.uncalculatedOrders || []).map(o => ({
+                            orderNumber: o.orderNumber || o.id, address: o.address, courier: o.courier
+                        })),
                         skippedNoCourier: stats.skippedNoCourier || 0,
                         skippedGeocoding: stats.skippedGeocoding || 0,
                         centroidFallbackCount: centroidFallbackCount || 0,

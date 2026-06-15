@@ -328,16 +328,16 @@ class SocketService {
                         }
                     }));
 
+                    // v8.1 BANDWIDTH: Only broadcast a lightweight signal to other tabs.
+                    // Full routes stay in the active tab — other tabs re-fetch via HTTP.
+                    // BroadcastChannel has NO compression, so sending full routes doubles traffic.
                     crossTabSync.broadcast('routes_update', {
-                        routes: data.routes,
+                        _signal: true,
                         date: data.date,
                         divisionId: data.divisionId,
-                        couriers: data.couriers || [],
-                        geoErrorOrders: data.geoErrorOrders || [],
-                        uncalculatedOrders: data.uncalculatedOrders || [],
+                        routeCount: data.routes.length,
                         skippedNoCourier: data.skippedNoCourier || 0,
                         skippedGeocoding: data.skippedGeocoding || 0,
-                        centroidFallbackCount: data.centroidFallbackCount || 0,
                         _timestamp: Date.now(),
                     });
                 }

@@ -1800,8 +1800,9 @@ app.post('/api/turbo/clear', authenticateToken, async (req, res) => {
          }
       }
       
-      // Let UI know routes to refresh
-      io.emit('routes_update', {
+      // v8.1 BANDWIDTH: Room-targeted emit
+      const divRoom = String(divisionId);
+      io.to(`div:${divRoom}`).to('div:all').emit('routes_update', {
           divisionId: divisionId,
           date: date,
           routes: []
@@ -1835,7 +1836,9 @@ app.post('/api/turbo/reset-stale-routes', authenticateToken, async (req, res) =>
 
     // Also emit a routes_update so UI refreshes
     const divisionId = req.body?.divisionId || 'all';
-    io.emit('routes_update', { divisionId, routes: [], cleared: true });
+    // v8.1 BANDWIDTH: Room-targeted emit (divisionId may be 'all' — that's fine)
+    const resetDivRoom = String(divisionId);
+    io.to(`div:${resetDivRoom}`).to('div:all').emit('routes_update', { divisionId, routes: [], cleared: true });
 
     res.json({ success: true, deletedCount: count, message: `Удалено ${count} устаревших маршрутов. Запустите Рассчитать для обновления.` });
   } catch (error) {
