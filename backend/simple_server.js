@@ -940,6 +940,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
       await ensureTable('StatusHistory', ensureStatusHistoryTable);
       await ensureTable('DivisionIdCol', ensureDivisionIdColumn);
       await ensureTable('ManualOverrides', ensureManualOverridesTable);
+      await ensureTable('GlobalOverrides', ensureGlobalOrderOverridesTable);
       await ensureTable('Routes', ensureRoutesTable);
       await ensureTable('Indexes', ensureIndexes);
       await ensureTable('KmlHubs', ensureKmlHubsTable);
@@ -1147,6 +1148,28 @@ async function ensureManualOverridesTable() {
     logger.info('DB Check: manual_order_overrides table verified/created successfully');
   } catch (err) {
     logger.error('DB Check: Error creating manual_order_overrides table', {
+      error: err.message,
+      stack: err.stack
+    });
+  }
+}
+
+/**
+ * Manual migration to ensure global_order_overrides table exists
+ */
+async function ensureGlobalOrderOverridesTable() {
+  try {
+    logger.info('DB Check: Ensuring global_order_overrides table exists...');
+    await sequelize.query(`
+      CREATE TABLE IF NOT EXISTS global_order_overrides(
+        order_id TEXT PRIMARY KEY,
+        override_data JSONB NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `);
+    logger.info('DB Check: global_order_overrides table verified/created successfully');
+  } catch (err) {
+    logger.error('DB Check: Error creating global_order_overrides table', {
       error: err.message,
       stack: err.stack
     });

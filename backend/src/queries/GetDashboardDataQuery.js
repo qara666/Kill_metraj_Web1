@@ -254,6 +254,7 @@ class GetDashboardDataQuery {
         // Применяем ручные переопределения (аккуратно)
         try {
             payload = await this.applyManualOverrides(payload);
+            payload = await this.applyGlobalOverrides(payload);
         } catch (overrideErr) {
             logger.error('CQRS V2: Failed to apply overrides', { error: overrideErr.message });
         }
@@ -319,6 +320,59 @@ class GetDashboardDataQuery {
             }
         } catch (err) {
             logger.error('Error in applyManualOverrides:', err.message);
+        }
+        return payload;
+    }
+
+    /**
+     * Применение всех глобальных переопределений из global_order_overrides
+     */
+    async applyGlobalOverrides(payload) {
+        if (!payload.orders || payload.orders.length === 0) return payload;
+
+        try {
+            const tableCheck = await sequelize.query(
+                `SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_name = 'global_order_overrides'
+                )`,
+                { type: sequelize.QueryTypes.SELECT }
+            );
+
+            if (!tableCheck[0]?.exists) return payload;
+
+            const overrides = await sequelize.query(
+                `SELECT order_id, override_data FROM global_order_overrides`,
+                { type: sequelize.QueryTypes.SELECT }
+            );
+
+            if (overrides.length === 0) return payload;
+
+            const overrideMap = new Map();
+            overrides.forEach(ov => overrideMap.set(String(ov.order_id), ov.override_data));
+
+            let hasChanges = false;
+            const updatedOrders = payload.orders.map(order => {
+                const orderIdStr = String(order.id || order.orderNumber);
+                if (overrideMap.has(orderIdStr)) {
+                    hasChanges = true;
+                    // Аккуратно мёрджим переопределенные поля поверх оригинального заказа
+                    const overrideData = overrideMap.get(orderIdStr) || {};
+                    // Мы не перезаписываем id и orderNumber
+                    const safeOverride = { ...overrideData };
+                    delete safeOverride.id;
+                    delete safeOverride.orderNumber;
+                    
+                    return { ...order, ...safeOverride };
+                }
+                return order;
+            });
+
+            if (hasChanges) {
+                return { ...payload, orders: updatedOrders };
+            }
+        } catch (err) {
+            logger.error('Error in applyGlobalOverrides:', err.message);
         }
         return payload;
     }

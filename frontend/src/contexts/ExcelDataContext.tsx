@@ -747,8 +747,23 @@ export const ExcelDataProvider: React.FC<ExcelDataProviderProps> = ({ children }
            if (id)  overrides[id]  = { ...(overrides[id]  || {}), ...ovr };
          }
        });
-       localStorage.setItem('km_manual_overrides', JSON.stringify(overrides));
-       
+        localStorage.setItem('km_manual_overrides', JSON.stringify(overrides));
+        
+        // V7.5: Global persistence of manual overrides to backend
+        const token = localStorage.getItem('km_access_token');
+        if (token && Object.keys(overrides).length > 0) {
+          fetch(`${API_URL}/api/v1/orders/overrides/bulk`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ overrides })
+          }).catch(err => {
+            console.warn('[ExcelSync] Failed to sync bulk overrides to server:', err);
+          });
+        }
+        
        if (excelDataRef.current && excelDataRef.current.orders) {
          const routesNoGeo = (excelDataRef.current.routes || []).map((r: any) => ({ ...r, geometry: undefined }));
          const fullData = { ...excelDataRef.current, orders: orders, routes: routesNoGeo };
