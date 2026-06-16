@@ -133,6 +133,16 @@ export const useDashboardWebSocket = ({
             });
             clearTimeout(timeoutId);
 
+            // v9.0 BANDWIDTH: 304 Not Modified — data unchanged, skip update
+            if ((response as any).notModified) {
+                logger.info('[Sync] 304 Not Modified — skipping update (ETag match)');
+                setApiLastSyncTime(Date.now());
+                if (!isSilent) setApiNextSyncTime(Date.now() + REFRESH_INTERVAL_MS);
+                setApiSyncStatus('idle');
+                if (isManual && toastId) toast.success('Данные актуальны', { id: toastId });
+                return;
+            }
+
             if (response.success && response.data) {
                 const ordersRaw = response.data.orders || [];
                 const ordersCount = ordersRaw.length;

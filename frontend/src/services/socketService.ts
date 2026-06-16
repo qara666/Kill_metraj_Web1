@@ -114,7 +114,6 @@ class SocketService {
             this.emit('reconnect_failed');
         });
 
-        // v22.6: Live status updates for the Robot counter (0/126)
         this.socket.on('robot_status', (data) => {
             const now = Date.now();
             try {
@@ -175,7 +174,7 @@ class SocketService {
                     ? Math.min(nextTotal, Math.max(prevProcessed, incomingProcessed))
                     : Math.min(incomingProcessed, nextTotal);
 
-                // Обновление current UI status
+                // Update current UI status
                 store.setAutoRoutingStatus({
                     ...data,
                     totalCount: nextTotal,
@@ -184,7 +183,7 @@ class SocketService {
                     lastUpdate: now
                 });
 
-                // Обновление aggregate status for global view or admins
+                // Update aggregate status for global view or admins
                 if (currentDivisionStr === 'all' || isGlobalUpdate) {
                     store.setAggregateRoutingStatus({
                         ...data,
@@ -195,13 +194,28 @@ class SocketService {
 
                 window.dispatchEvent(new CustomEvent('km:robot:status', { detail: data }));
                 
+                // v9.0 BANDWIDTH: Broadcast only slim signal to other tabs (no courierStats/diagnostics)
                 crossTabSync.broadcast('robot_status', {
-                    ...data,
+                    divisionId: data.divisionId,
+                    date: data.date,
+                    isActive: finalActive,
+                    totalCount: nextTotal,
+                    processedCount: nextProcessed,
+                    message: data.message,
+                    currentPhase: data.currentPhase,
+                    _signal: true,
                     _timestamp: now,
                 });
             } catch (e) {
                 console.warn('[SocketService] robot_status handling error:', e);
             }
+        });
+
+        // v9.0 BANDWIDTH: Handle heavy courier detail (emitted every 30s separately)
+        this.socket.on('courier_stats_detail', (data) => {
+            try {
+                window.dispatchEvent(new CustomEvent('km:robot:courier_detail', { detail: data }));
+            } catch (e) {}
         });
 
         // v6.19: Handle aggregate global status for Admins

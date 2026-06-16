@@ -216,7 +216,7 @@ router.post('/dashboard/fetch', async (req, res) => {
         // 1. Первичная проверка кэша (Пропускаем если force=true)
         if (!force && !isGlobal) {
             const cached = await sequelize.query(
-                `SELECT payload FROM api_dashboard_cache 
+                `SELECT payload, data_hash FROM api_dashboard_cache 
                  WHERE status_code = 200 AND division_id = :divId AND target_date = :targetDate 
                  LIMIT 1`,
                 { replacements: { divId: String(divisionId), targetDate: targetDateISO }, type: sequelize.QueryTypes.SELECT }
@@ -224,6 +224,18 @@ router.post('/dashboard/fetch', async (req, res) => {
             if (cached.length > 0) {
                 logger.debug(` Cache hit for ${divisionId}`);
                 let payload = typeof cached[0].payload === 'string' ? JSON.parse(cached[0].payload) : cached[0].payload;
+
+                // v9.0 BANDWIDTH: ETag / 304 Not Modified support using data_hash
+                const cacheHash = cached[0].data_hash || '';
+                if (cacheHash) {
+                    const etag = `"${cacheHash}"`;
+                    res.set('ETag', etag);
+                    res.set('Cache-Control', 'no-cache');
+                    if (req.headers['if-none-match'] === etag) {
+                        logger.debug(` ETag match 304 for ${divisionId}`);
+                        return res.status(304).end();
+                    }
+                }
                 
                 // Страховка: Восстанавливаем маршруты, если они отсутствуют в payload кэша
                 if (!payload.routes || payload.routes.length === 0) {

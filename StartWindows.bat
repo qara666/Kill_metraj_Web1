@@ -1,111 +1,134 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 > nul
-
-:: Настройка цветов ANSI
-for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
-set "RED=%ESC%[91m"
-set "GREEN=%ESC%[92m"
-set "YELLOW=%ESC%[93m"
-set "BLUE=%ESC%[94m"
-set "CYAN=%ESC%[96m"
-set "RESET=%ESC%[0m"
-
 title Kill Metraj - Dev Server
 
-echo %CYAN%=======================================================
-echo   _  __ _  _  _   __  __      _                 _ 
-echo  ^| ^|/ /(^|)^| ^|^| ^| ^|  \/  ^|    ^| ^|               (_)
-echo  ^| ' /  _ ^| ^|^| ^| ^| \  / ^| ___^| ^|_ _ __ __ _     _ 
-echo  ^|  ^<  ^| ^|^| ^|^| ^| ^| ^|\/^| ^|/ _ \ __^| '__/ _` ^|   ^| ^|
-echo  ^| . \ ^| ^|^| ^|^| ^| ^| ^|  ^| ^|  __/ ^|_^| ^| ^| (_^| ^|   ^| ^|
-echo  ^|_^|\_\^|_^|^|_^|^|_^| ^|_^|  ^|_^|\___^|\__^|_^|  \__,_^|   ^| ^|
-echo                                               _/ ^|
-echo                                              ^|__/ 
-echo =======================================================%RESET%
+for /F "delims=" %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
+set "R=%ESC%[91m"
+set "G=%ESC%[92m"
+set "Y=%ESC%[93m"
+set "B=%ESC%[94m"
+set "C=%ESC%[96m"
+set "Z=%ESC%[0m"
+
+cls
+echo %C%=========================================================
+echo   _  ___ _ _   __  __      _
+echo  ^| ^|/ (_) ^| ^| ^|  \/  ^|    ^| ^|
+echo  ^| ' / _^| ^| ^|_^| \  / ^|___^| ^|_ _ __ __ _ _
+echo  ^|  ^< ^| ^| ^| ^| ^__^| ^|\/^| / _ \ __^| '__/ _  ^| ^|
+echo  ^| . \^| ^| ^| ^| ^|_^| ^|  ^| ^|  __/ ^|_^| ^| ^| (_^| ^| ^|
+echo  ^|_^|\_\_^|_^|_^|\__^|_^|  ^|_^|\___^|\__^|_^|  \__,_^|_^|
+echo.
+echo                     Dev Server Launcher
+echo ==========================================================%Z%
 echo.
 
-:: 1. Проверка окружения
-echo %YELLOW%[1/4] Проверка окружения...%RESET%
+::---[ STEP 1: Check Node.js ]---
+echo %Y%[1/4] Checking Node.js...%Z%
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo %RED%[ERROR] Node.js не найден! Скачайте с https://nodejs.org/%RESET%
+    echo %R%[ERROR] Node.js not found! Download: https://nodejs.org/%Z%
     pause
     exit /b 1
 )
 for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
-echo %GREEN%[OK] Node.js найден: %NODE_VER%%RESET%
+for /f "tokens=*" %%i in ('npm -v') do set NPM_VER=%%i
+echo %G%[OK] Node.js %NODE_VER%  ^|  npm v%NPM_VER%%Z%
 
-:: 2. Установка зависимостей
+::---[ STEP 2: Install deps ]---
 echo.
-echo %YELLOW%[2/4] Проверка зависимостей...%RESET%
+echo %Y%[2/4] Checking dependencies...%Z%
 
 if not exist "backend\node_modules\" (
-    echo %BLUE%Установка npm пакетов для Backend...%RESET%
+    echo %B%[..] Installing backend packages...%Z%
     cd backend
     call npm install
+    if %errorlevel% neq 0 (
+        echo %R%[ERROR] npm install failed in backend/%Z%
+        cd ..
+        pause
+        exit /b 1
+    )
     cd ..
-    echo %GREEN%[OK] Backend зависимости установлены.%RESET%
+    echo %G%[OK] Backend packages installed.%Z%
 ) else (
-    echo %GREEN%[OK] Backend зависимости уже установлены.%RESET%
+    echo %G%[OK] Backend node_modules found.%Z%
 )
 
 if not exist "frontend\node_modules\" (
-    echo %BLUE%Установка npm пакетов для Frontend...%RESET%
+    echo %B%[..] Installing frontend packages...%Z%
     cd frontend
     call npm install
+    if %errorlevel% neq 0 (
+        echo %R%[ERROR] npm install failed in frontend/%Z%
+        cd ..
+        pause
+        exit /b 1
+    )
     cd ..
-    echo %GREEN%[OK] Frontend зависимости установлены.%RESET%
+    echo %G%[OK] Frontend packages installed.%Z%
 ) else (
-    echo %GREEN%[OK] Frontend зависимости уже установлены.%RESET%
+    echo %G%[OK] Frontend node_modules found.%Z%
 )
 
-:: 3. Запуск серверов
+::---[ STEP 3: Start servers ]---
 echo.
-echo %YELLOW%[3/4] Запуск серверов...%RESET%
+echo %Y%[3/4] Starting servers...%Z%
 
-cd backend
-start "Kill Metraj - Backend (5001)" cmd /c "title Backend Server && npm run dev"
-cd ..
-echo %GREEN%[+] Backend запускается в отдельном окне (порт 5001)%RESET%
+set "ROOT_DIR=%CD%"
 
-cd frontend
-start "Kill Metraj - Frontend (5174)" cmd /c "title Frontend Server && npm run dev"
-cd ..
-echo %GREEN%[+] Frontend запускается в отдельном окне (порт 5174)%RESET%
+start "Backend (port 5001)" cmd /k "title Backend ^| port 5001 && cd /d %ROOT_DIR%\backend && npm run dev"
+echo %G%[+] Backend started in new window (port 5001)%Z%
 
-:: 4. Ожидание готовности
+start "Frontend (port 5174)" cmd /k "title Frontend ^| port 5174 && cd /d %ROOT_DIR%\frontend && npm run dev"
+echo %G%[+] Frontend started in new window (port 5174)%Z%
+
+::---[ STEP 4: Wait for frontend ]---
 echo.
-echo %YELLOW%[4/4] Ожидание готовности фронтенда...%RESET%
+echo %Y%[4/4] Waiting for frontend to be ready...%Z%
 
-set MAX_ATTEMPTS=25
 set ATTEMPT=0
+set MAX=30
 
 :WAIT_LOOP
 set /a ATTEMPT+=1
-if %ATTEMPT% GTR %MAX_ATTEMPTS% (
-    echo %RED%[WARN] Превышено время ожидания. Пробуем открыть браузер...%RESET%
-    goto OPEN_BROWSER
+if !ATTEMPT! GTR %MAX% (
+    echo %R%[WARN] Timeout reached. Opening browser anyway...%Z%
+    goto :OPEN_BROWSER
 )
 
-powershell -Command "try { $null = Invoke-WebRequest -Uri 'http://localhost:5174' -UseBasicParsing -ErrorAction Stop; exit 0 } catch { exit 1 }" >nul 2>nul
-if %errorlevel% neq 0 (
-    echo %BLUE%Ожидание ответа сервера... Попытка %ATTEMPT% из %MAX_ATTEMPTS%%RESET%
-    timeout /t 2 /nobreak > nul
-    goto WAIT_LOOP
-)
+powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
+if %errorlevel% equ 0 goto :READY
 
-echo %GREEN%[OK] Серверы успешно запущены и отвечают!%RESET%
+set /a DOT_POS=!ATTEMPT!*3
+echo %B%  Attempt !ATTEMPT!/%MAX% - waiting...%Z%
+timeout /t 2 /nobreak >nul
+goto :WAIT_LOOP
+
+:READY
+echo %G%[OK] Frontend is up and responding!%Z%
 
 :OPEN_BROWSER
 echo.
-echo %CYAN%Открытие Google Chrome...%RESET%
-start chrome "http://localhost:5174" || start http://localhost:5174
+echo %C%Opening Chrome...%Z%
+
+:: Try Chrome first, fallback to default browser
+where chrome >nul 2>nul
+if %errorlevel% equ 0 (
+    start "" chrome "http://localhost:5174"
+) else (
+    start "" "http://localhost:5174"
+)
 
 echo.
-echo %GREEN%=======================================================
-echo Система работает. Логи доступны в открытых окнах.
-echo Чтобы выключить проект, закрой черные окна cmd.
-echo =======================================================%RESET%
+echo %G%=========================================================
+echo   STATUS
+echo ==========================================================%Z%
+echo   Frontend : %G%http://localhost:5174%Z%
+echo   Backend  : %G%http://localhost:5001%Z%
+echo %C%=========================================================
+echo   Close the black cmd windows to stop the servers.
+echo ==========================================================%Z%
 echo.
 pause

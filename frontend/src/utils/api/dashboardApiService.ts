@@ -7,6 +7,7 @@ export interface FetchDashboardDataResponse {
     data: any;
     error?: string;
     details?: any;
+    notModified?: boolean;
 }
 
 // Интерфейс для запроса
@@ -19,6 +20,9 @@ export interface FetchDashboardDataRequest {
 }
 
 const API_BASE_URL = `${API_URL}/api/v1`;
+
+// v9.0 BANDWIDTH: ETag cache — keyed by divisionId+date
+const etagCache = new Map<string, string>();
 
 export const dashboardApiService = {
     /**
@@ -37,6 +41,14 @@ export const dashboardApiService = {
                 };
             }
 
+            // v9.0 BANDWIDTH: Send If-None-Match if we have a cached ETag
+            const etagKey = `${request.divisionId || 'all'}:${request.date}`;
+            const cachedEtag = !request.force ? etagCache.get(etagKey) : undefined;
+            const extraHeaders: Record<string, string> = {};
+            if (cachedEtag) {
+                extraHeaders['If-None-Match'] = cachedEtag;
+            }
+
             const executeFetch = async () => {
                 return await axios.post<FetchDashboardDataResponse>(
                     `${API_BASE_URL}/dashboard/fetch`,
@@ -44,9 +56,11 @@ export const dashboardApiService = {
                     {
                         headers: {
                             'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
+                            ...extraHeaders
                         },
-                        timeout: 60000 // 60 секунд тайм-аут для тяжелых запросов
+                        timeout: 60000, // 60 секунд тайм-аут для тяжелых запросов
+                        validateStatus: (s) => s < 500 // allow 304
                     }
                 );
             };
@@ -63,6 +77,17 @@ export const dashboardApiService = {
                 } else {
                     throw err;
                 }
+            }
+
+            // v9.0 BANDWIDTH: 304 Not Modified — data unchanged, skip update
+            if (response.status === 304) {
+                return { success: false, data: null, notModified: true };
+            }
+
+            // Store ETag for next request
+            const newEtag = response.headers['etag'];
+            if (newEtag) {
+                etagCache.set(etagKey, newEtag);
             }
 
             return response.data;

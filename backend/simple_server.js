@@ -1534,26 +1534,26 @@ io.on('connection', (socket) => {
   // Отслеживание подключения WebSocket в метриках
   trackWebSocketConnection('connect', user.divisionId, user.role);
 
-  // Send latest dashboard data on connection
+  // v9.0 BANDWIDTH: On connect send only slim signal — client fetches full data via HTTP.
+  // This eliminates heavy orders[] WS payload on every reconnect.
   GetDashboardDataQuery.execute({
     divisionId: userDivision,
     user
   }).then(result => {
     if (result) {
-      // v8.0 BANDWIDTH: Strip heavy fields not needed on connect (addresses, paymentMethods arrays)
-      const lightPayload = result.payload ? {
-        orders: result.payload.orders,
-        couriers: result.payload.couriers,
-        statistics: result.payload.statistics
-      } : null;
+      const orderCount = result.payload?.orders?.length || 0;
+      // Slim signal: statistics only, no orders[] / couriers[] arrays
       socket.emit('dashboard:update', {
-        data: lightPayload,
+        data: null,
+        _needsRefetch: true,
+        statistics: result.payload?.statistics || null,
+        orderCount,
         timestamp: result.created_at,
         status: result.status_code,
         source: 'on_connect',
         divisionId: userDivision
       });
-      logger.info(`Отправлены начальные данные дашборда клиенту ${socket.id} (заказов: ${result.payload?.orders?.length || 0})`);
+      logger.info(`Отправлен slim connect-сигнал клиенту ${socket.id} (заказов: ${orderCount})`);
     }
   }).catch(error => {
     logger.error('Ошибка при отправке начальных данных дашборда:', error);
@@ -1583,6 +1583,14 @@ app.get('/api/dashboard/latest', authenticateToken, async (req, res) => {
         success: false,
         error: 'Данные дашборда пока недоступны'
       });
+    }
+
+    // v9.0 BANDWIDTH: ETag / 304 Not Modified support
+    const etag = `"${Buffer.from(String(result.created_at || '')).toString('base64')}"`;
+    res.set('ETag', etag);
+    res.set('Cache-Control', 'no-cache');
+    if (req.headers['if-none-match'] === etag) {
+      return res.status(304).end();
     }
 
     res.json({

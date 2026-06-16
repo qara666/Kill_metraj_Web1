@@ -1351,7 +1351,7 @@ class OrderCalculator {
                 if (!force && lastEmit && (now - lastEmit < 2000)) return;
                 if (this.lastEmitTimeByKey) this.lastEmitTimeByKey.set(statusKey, now);
 
-                // Построение couriersSummary (источник истины для EliteCourierCard)
+                // v9.0 BANDWIDTH: Build couriersSummary (slim — name/orders/dist only)
                 const summary = {};
                 Object.values(stats.courierStats || {}).forEach(cs => {
                     const bonusDist = (cs.ordersInRoutes || 0) * 0.5;
@@ -1364,41 +1364,69 @@ class OrderCalculator {
                 });
                 stats.couriersSummary = summary;
 
-                const payload = {
+                // v9.0 BANDWIDTH: SLIM payload — strip heavy fields (courierStats, geoErrors, uncalculatedOrders, diagnostics)
+                // These are emitted separately via courier_stats_detail every 30s
+                const slimPayload = {
                     divisionId: divIdStr,
                     date: dateStr,
-                    ...stats,
+                    isActive: stats.isActive,
                     lastUpdate: now,
-                    // v37.1: Обратная совместимость для DivisionStatusPanel (вкладка Real-time)
-                    couriers: Object.values(stats.courierStats || {}).map(cs => {
-                        const bonusDist = (cs.ordersInRoutes || 0) * 0.5;
-                        return {
-                        name: cs.name,
-                        orders: cs.ordersInRoutes || cs.orders || 0,
-                        distanceKm: Number((cs.distanceKm || 0).toFixed(1)),
-                        bonusDistance: Number(bonusDist.toFixed(1)),
-                        totalDistance: Number(((cs.distanceKm || 0) + bonusDist).toFixed(1))
-                    };
-                    })
+                    totalCount: stats.totalCount,
+                    totalOrdersAll: stats.totalOrdersAll,
+                    processedCount: stats.processedCount,
+                    totalCouriers: stats.totalCouriers,
+                    processedCouriers: stats.processedCouriers,
+                    skippedGeocoding: stats.skippedGeocoding,
+                    skippedInRoutes: stats.skippedInRoutes,
+                    skippedNoCourier: stats.skippedNoCourier,
+                    totalRoutesCreated: stats.totalRoutesCreated,
+                    message: stats.message,
+                    currentPhase: stats.currentPhase,
+                    couriersSummary: summary,
                 };
 
-                // Диагностика и здоровье
-                try {
-                    if (this.routingHealth) {
-                        payload.diagnostics.routing = {
-                            engines: Object.fromEntries(Array.from(this.routingHealth.entries())),
-                            selfHost: selfHostRoutingHealth.getState()
-                        };
-                    }
-                } catch (e) {}
-
-                if (this.divisionStatus) this.divisionStatus.set(statusKey, payload);
-                if (global.divisionStatusStore) global.divisionStatusStore[statusKey] = payload;
+                if (this.divisionStatus) this.divisionStatus.set(statusKey, slimPayload);
+                if (global.divisionStatusStore) global.divisionStatusStore[statusKey] = slimPayload;
 
                 // v8.0 BANDWIDTH: Room-targeted emit — only division members + admins receive this
                 const divRoom = `div:${divIdStr}`;
-                this.io.to(divRoom).to('div:all').emit('robot_status', payload);
-                this.io.to(divRoom).to('div:all').emit('division_status_update', payload);
+                this.io.to(divRoom).to('div:all').emit('robot_status', slimPayload);
+                this.io.to(divRoom).to('div:all').emit('division_status_update', slimPayload);
+
+                // v9.0 BANDWIDTH: Emit heavy courier detail separately, throttled to 30s
+                if (!this.lastDetailEmitByKey) this.lastDetailEmitByKey = new Map();
+                const lastDetail = this.lastDetailEmitByKey.get(statusKey) || 0;
+                if (force || (now - lastDetail >= 30000)) {
+                    this.lastDetailEmitByKey.set(statusKey, now);
+                    const couriersArr = Object.values(stats.courierStats || {}).map(cs => {
+                        const bonusDist = (cs.ordersInRoutes || 0) * 0.5;
+                        return {
+                            name: cs.name,
+                            orders: cs.ordersInRoutes || cs.orders || 0,
+                            distanceKm: Number((cs.distanceKm || 0).toFixed(1)),
+                            bonusDistance: Number(bonusDist.toFixed(1)),
+                            totalDistance: Number(((cs.distanceKm || 0) + bonusDist).toFixed(1))
+                        };
+                    });
+                    const detailPayload = {
+                        divisionId: divIdStr,
+                        date: dateStr,
+                        couriers: couriersArr,
+                        geoErrors: stats.geoErrors || [],
+                        uncalculatedOrders: stats.uncalculatedOrders || [],
+                    };
+                    try {
+                        if (this.routingHealth) {
+                            detailPayload.diagnostics = {
+                                routing: {
+                                    engines: Object.fromEntries(Array.from(this.routingHealth.entries())),
+                                    selfHost: selfHostRoutingHealth.getState()
+                                }
+                            };
+                        }
+                    } catch (e) {}
+                    this.io.to(divRoom).to('div:all').emit('courier_stats_detail', detailPayload);
+                }
             };
 
             // v37.0: НЕМЕДЛЕННЫЙ ВЫПУСК для пробуждения UI
