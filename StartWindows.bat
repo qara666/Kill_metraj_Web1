@@ -1,8 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 > nul
-title Kill Metraj - Dev Server
+title Запуск проекта
 
+:: Подрубаем цвета для красивого вывода
 for /F "delims=" %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
 set "R=%ESC%[91m"
 set "G=%ESC%[92m"
@@ -12,130 +13,127 @@ set "C=%ESC%[96m"
 set "Z=%ESC%[0m"
 
 cls
-echo %C%=========================================================
-echo   _  ___ _ _   __  __      _
-echo  ^| ^|/ (_) ^| ^| ^|  \/  ^|    ^| ^|
-echo  ^| ' / _^| ^| ^|_^| \  / ^|___^| ^|_ _ __ __ _ _
-echo  ^|  ^< ^| ^| ^| ^| ^__^| ^|\/^| / _ \ __^| '__/ _  ^| ^|
-echo  ^| . \^| ^| ^| ^| ^|_^| ^|  ^| ^|  __/ ^|_^| ^| ^| (_^| ^| ^|
-echo  ^|_^|\_\_^|_^|_^|\__^|_^|  ^|_^|\___^|\__^|_^|  \__,_^|_^|
-echo.
-echo                     Dev Server Launcher
+echo %C%==========================================================
+echo   Автоматический запуск проекта (без установки)
 echo ==========================================================%Z%
 echo.
 
-::---[ STEP 1: Check Node.js ]---
-echo %Y%[1/4] Checking Node.js...%Z%
+:: 1. Ищем локальный Node.js
 where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo %Y%[WARN] Node.js not found! Downloading portable version...%Z%
-    if not exist ".portable-node" mkdir ".portable-node"
-    if not exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
-        echo %B%  Downloading Node.js v20.14.0 (about 30MB)...%Z%
-        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
-        echo %B%  Extracting Node.js...%Z%
-        powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
-        del ".portable-node\node.zip"
-    )
-    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+if %errorlevel% equ 0 (
+    echo %G%[+] Нашли Node.js в системе. Отлично.%Z%
+    goto :START_NODE
 )
-for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
-for /f "tokens=*" %%i in ('npm -v') do set NPM_VER=%%i
-echo %G%[OK] Node.js %NODE_VER%  ^|  npm v%NPM_VER%%Z%
 
-::---[ STEP 2: Install deps ]---
+:: 2. Ищем портативный Node.js (если уже качали)
+if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
+    echo %G%[+] Нашли портативный Node.js. Запускаем из него...%Z%
+    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+    goto :START_NODE
+)
+
+:: 3. Если нет Node, проверяем Docker
+where docker-compose >nul 2>nul
+if %errorlevel% equ 0 (
+    echo %Y%[~] Node.js нет, но есть Docker. Поднимаем контейнеры...%Z%
+    goto :START_DOCKER
+)
+where docker >nul 2>nul
+if %errorlevel% equ 0 (
+    echo %Y%[~] Node.js нет, но есть Docker. Поднимаем контейнеры...%Z%
+    goto :START_DOCKER
+)
+
+:: 4. Если ничего нет — качаем портативную версию (ZIP), права админа не нужны
+echo %Y%[~] Ни Node.js, ни Docker не найдены.%Z%
+echo %B%[*] Скачиваем портативный Node.js (весит ~30 МБ, ставится сам в скрытую папку)...%Z%
+
+if not exist ".portable-node" mkdir ".portable-node"
+powershell -NoProfile -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
+
+echo %B%[*] Распаковываем архив...%Z%
+powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
+del /q ".portable-node\node.zip"
+
+set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+echo %G%[+] Готово! Теперь всё запустится.%Z%
+goto :START_NODE
+
+
+:: ---------------------------------------------------------
+:: БЛОК ЗАПУСКА DOCKER
+:: ---------------------------------------------------------
+:START_DOCKER
 echo.
-echo %Y%[2/4] Checking dependencies...%Z%
+echo %C%Запускаем базу, бэкенд и фронт через Docker...%Z%
+docker-compose up --build -d
+echo.
+echo %G%==========================================================
+echo   Всё поднято через Docker!
+echo   Сайт     : http://localhost:80 (первый запуск займет секунд 30)
+echo   API      : http://localhost:5001
+echo ==========================================================%Z%
+echo %Y%Нажми любую кнопку в этом окне, чтобы выключить серверы...%Z%
+pause >nul
+echo %C%Останавливаем контейнеры...%Z%
+docker-compose down
+exit /b 0
+
+
+:: ---------------------------------------------------------
+:: БЛОК ЗАПУСКА NODE.JS
+:: ---------------------------------------------------------
+:START_NODE
+echo.
+echo %C%Проверяем зависимости...%Z%
 
 if not exist "backend\node_modules\" (
-    echo %B%[..] Installing backend packages...%Z%
+    echo %B%[*] Ставим пакеты для бэкенда...%Z%
     cd backend
     call npm install
-    if %errorlevel% neq 0 (
-        echo %R%[ERROR] npm install failed in backend/%Z%
-        cd ..
-        pause
-        exit /b 1
-    )
     cd ..
-    echo %G%[OK] Backend packages installed.%Z%
-) else (
-    echo %G%[OK] Backend node_modules found.%Z%
 )
 
 if not exist "frontend\node_modules\" (
-    echo %B%[..] Installing frontend packages...%Z%
+    echo %B%[*] Ставим пакеты для фронтенда...%Z%
     cd frontend
     call npm install
-    if %errorlevel% neq 0 (
-        echo %R%[ERROR] npm install failed in frontend/%Z%
-        cd ..
-        pause
-        exit /b 1
-    )
     cd ..
-    echo %G%[OK] Frontend packages installed.%Z%
-) else (
-    echo %G%[OK] Frontend node_modules found.%Z%
 )
 
-::---[ STEP 3: Start servers ]---
 echo.
-echo %Y%[3/4] Starting servers...%Z%
-
+echo %C%Поднимаем серверы...%Z%
 set "ROOT_DIR=%CD%"
 
-start "Backend (port 5001)" cmd /k "title Backend ^| port 5001 && cd /d %ROOT_DIR%\backend && npm run dev"
-echo %G%[+] Backend started in new window (port 5001)%Z%
+start "Бэкенд (порт 5001)" cmd /k "title Бэкенд && cd /d %ROOT_DIR%\backend && npm run dev"
+start "Фронтенд (порт 5174)" cmd /k "title Фронтенд && cd /d %ROOT_DIR%\frontend && npm run dev"
 
-start "Frontend (port 5174)" cmd /k "title Frontend ^| port 5174 && cd /d %ROOT_DIR%\frontend && npm run dev"
-echo %G%[+] Frontend started in new window (port 5174)%Z%
-
-::---[ STEP 4: Wait for frontend ]---
 echo.
-echo %Y%[4/4] Waiting for frontend to be ready...%Z%
-
+echo %B%[*] Ждем, пока проснется сайт...%Z%
 set ATTEMPT=0
-set MAX=30
+set MAX=25
 
 :WAIT_LOOP
 set /a ATTEMPT+=1
-if !ATTEMPT! GTR %MAX% (
-    echo %R%[WARN] Timeout reached. Opening browser anyway...%Z%
-    goto :OPEN_BROWSER
-)
-
+if !ATTEMPT! GTR %MAX% goto :OPEN_BROWSER
 powershell -NoProfile -Command "try{Invoke-WebRequest -Uri 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
-if %errorlevel% equ 0 goto :READY
-
-set /a DOT_POS=!ATTEMPT!*3
-echo %B%  Attempt !ATTEMPT!/%MAX% - waiting...%Z%
-timeout /t 2 /nobreak >nul
+if %errorlevel% equ 0 goto :OPEN_BROWSER
+timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP
-
-:READY
-echo %G%[OK] Frontend is up and responding!%Z%
 
 :OPEN_BROWSER
 echo.
-echo %C%Opening Chrome...%Z%
-
-:: Try Chrome first, fallback to default browser
-where chrome >nul 2>nul
-if %errorlevel% equ 0 (
-    start "" chrome "http://localhost:5174"
-) else (
-    start "" "http://localhost:5174"
-)
+echo %G%[+] Всё работает! Открываю браузер...%Z%
+start "" "http://localhost:5174"
 
 echo.
-echo %G%=========================================================
-echo   STATUS
+echo %G%==========================================================
+echo   ВСЁ УСПЕШНО ЗАПУЩЕНО
 echo ==========================================================%Z%
-echo   Frontend : %G%http://localhost:5174%Z%
-echo   Backend  : %G%http://localhost:5001%Z%
-echo %C%=========================================================
-echo   Close the black cmd windows to stop the servers.
-echo ==========================================================%Z%
+echo   Сайт     : %C%http://localhost:5174%Z%
+echo   API      : %C%http://localhost:5001%Z%
 echo.
+echo   %Y%Чтобы выключить, просто закрой два черных окна консоли.%Z%
+echo %G%==========================================================%Z%
 pause
+exit /b 0
