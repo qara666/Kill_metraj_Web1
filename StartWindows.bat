@@ -18,17 +18,17 @@ echo   Автоматический запуск проекта (без уста
 echo ==========================================================%Z%
 echo.
 
-:: 1. Ищем локальный Node.js
-where node >nul 2>nul
-if %errorlevel% equ 0 (
-    echo %G%[+] Нашли Node.js в системе. Отлично.%Z%
+:: 1. Сначала проверяем, есть ли уже портативная версия (чтобы запуститься мгновенно)
+if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
+    echo %G%[+] Используем скачанный портативный Node.js. Запуск...%Z%
+    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
     goto :START_NODE
 )
 
-:: 2. Ищем портативный Node.js (если уже качали)
-if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
-    echo %G%[+] Нашли портативный Node.js. Запускаем из него...%Z%
-    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+:: 2. Иначе ищем локальный Node.js в системе
+where node >nul 2>nul
+if %errorlevel% equ 0 (
+    echo %G%[+] Нашли Node.js в системе. Отлично.%Z%
     goto :START_NODE
 )
 
@@ -44,16 +44,19 @@ if %errorlevel% equ 0 (
     goto :START_DOCKER
 )
 
-:: 4. Если ничего нет — качаем портативную версию (ZIP), права админа не нужны
+:: 4. Если ничего нет — распаковываем локальный оффлайн-архив!
 echo %Y%[~] Ни Node.js, ни Docker не найдены.%Z%
-echo %B%[*] Скачиваем портативный Node.js (весит ~30 МБ, ставится сам в скрытую папку)...%Z%
+echo %B%[*] Распаковываем встроенный портативный Node.js (работает 100%% оффлайн без интернета)...%Z%
 
 if not exist ".portable-node" mkdir ".portable-node"
-powershell -NoProfile -Command "$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
 
-echo %B%[*] Распаковываем архив...%Z%
-powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
-del /q ".portable-node\node.zip"
+if exist ".portable-node-installer\node.zip" (
+    powershell -NoProfile -Command "Expand-Archive -Path '.portable-node-installer\node.zip' -DestinationPath '.portable-node' -Force"
+) else (
+    echo %R%[ERROR] Оффлайн архив не найден! Обратитесь к разработчику.%Z%
+    pause
+    exit /b 1
+)
 
 set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
 echo %G%[+] Готово! Теперь всё запустится.%Z%
