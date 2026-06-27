@@ -28,9 +28,16 @@ echo.
 echo %Y%[1/4] Checking Node.js...%Z%
 where node >nul 2>nul
 if %errorlevel% neq 0 (
-    echo %R%[ERROR] Node.js not found! Download: https://nodejs.org/%Z%
-    pause
-    exit /b 1
+    echo %Y%[WARN] Node.js not found! Downloading portable version...%Z%
+    if not exist ".portable-node" mkdir ".portable-node"
+    if not exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
+        echo %B%  Downloading Node.js v20.14.0 (about 30MB)...%Z%
+        powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
+        echo %B%  Extracting Node.js...%Z%
+        powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
+        del ".portable-node\node.zip"
+    )
+    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
 )
 for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
 for /f "tokens=*" %%i in ('npm -v') do set NPM_VER=%%i

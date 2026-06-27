@@ -33,3 +33,6 @@ pnpm-debug.log*
 *.zip
 *.tar.gz
 .agents/
+
+# Portable Node fallback
+.portable-node/
