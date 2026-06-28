@@ -1,4 +1,22 @@
-const { pool } = require('../config/database');
+const { sequelize } = require('../config/database');
+
+// Адаптер: эмулирует интерфейс pg.Pool через Sequelize (работает с SQLite и Postgres)
+const pool = {
+    query: async (sql, params = []) => {
+        // Sequelize использует ? для SQLite и $N для Postgres — конвертируем $1,$2 → ?
+        const dialect = sequelize.getDialect();
+        let finalSql = sql;
+        if (dialect === 'sqlite') {
+            finalSql = sql.replace(/\$\d+/g, '?');
+        }
+        const [rows] = await sequelize.query(finalSql, {
+            replacements: params,
+            type: sequelize.QueryTypes.RAW,
+            raw: true
+        });
+        return { rows: Array.isArray(rows) ? rows : [] };
+    }
+};
 
 /**
  * CourierSettlement Model

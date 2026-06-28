@@ -55,7 +55,25 @@ async function testConnection() {
   }
 }
 
+// ── SQLite compatibility: rewrite Postgres SQL on the fly ──────────────
+if (useSqlite) {
+  sequelize.addHook('beforeQuery', (options) => {
+    if (typeof options.query === 'string') {
+      options.query = options.query
+        // NOW() → CURRENT_TIMESTAMP
+        .replace(/\bNOW\(\)/gi, 'CURRENT_TIMESTAMP')
+        // TIMESTAMP WITH TIME ZONE → TEXT (SQLite stores everything as TEXT)
+        .replace(/TIMESTAMP WITH TIME ZONE/gi, 'TEXT')
+        // INTERVAL '...' not supported — strip WHERE clauses using INTERVAL
+        .replace(/>\s*CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'[^']+'/gi, "> datetime('now','-1 day')")
+        // ON CONFLICT DO UPDATE (mostly ok but strip Postgres-only EXCLUDED references if needed)
+        ;
+    }
+  });
+}
+
 sequelize.addHook('beforeQuery', async (options, query) => {
+
   if (sequelize.getDialect() === 'sqlite') return; // RLS not supported in SQLite
 
   const context = rlsContextStore.getStore();
