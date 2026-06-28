@@ -55,21 +55,19 @@ async function testConnection() {
   }
 }
 
-// ── SQLite compatibility: rewrite Postgres SQL on the fly ──────────────
+// ── SQLite compatibility: patch sequelize.query to rewrite Postgres SQL ──
 if (useSqlite) {
-  sequelize.addHook('beforeQuery', (options) => {
-    if (typeof options.query === 'string') {
-      options.query = options.query
-        // NOW() → CURRENT_TIMESTAMP
-        .replace(/\bNOW\(\)/gi, 'CURRENT_TIMESTAMP')
-        // TIMESTAMP WITH TIME ZONE → TEXT (SQLite stores everything as TEXT)
+  const _origQuery = sequelize.query.bind(sequelize);
+  sequelize.query = function(sql, options) {
+    if (typeof sql === 'string') {
+      sql = sql
+        .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP")
         .replace(/TIMESTAMP WITH TIME ZONE/gi, 'TEXT')
-        // INTERVAL '...' not supported — strip WHERE clauses using INTERVAL
-        .replace(/>\s*CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'[^']+'/gi, "> datetime('now','-1 day')")
-        // ON CONFLICT DO UPDATE (mostly ok but strip Postgres-only EXCLUDED references if needed)
-        ;
+        .replace(/>\s*NOW\(\)\s*-\s*INTERVAL\s*'[^']+'/gi, "> datetime('now','-1 day')")
+        .replace(/>\s*CURRENT_TIMESTAMP\s*-\s*INTERVAL\s*'[^']+'/gi, "> datetime('now','-1 day')");
     }
-  });
+    return _origQuery(sql, options);
+  };
 }
 
 sequelize.addHook('beforeQuery', async (options, query) => {
