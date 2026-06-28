@@ -92,12 +92,15 @@ exit /b 0
 echo.
 echo %C%Проверяем зависимости...%Z%
 
-if not exist "backend\node_modules\" (
-    echo %B%[*] Ставим пакеты для бэкенда...%Z%
-    cd backend
-    call npm install
-    cd ..
+cd backend
+if not exist "node_modules" (
+    echo %B%[*] Устанавливаем зависимости бэкенда...%Z%
+    call npm install --no-fund --no-audit
+) else if not exist "node_modules\sqlite3" (
+    echo %B%[*] Доустанавливаем драйвер SQLite...%Z%
+    call npm install sqlite3 --no-fund --no-audit
 )
+cd ..
 
 if not exist "frontend\node_modules\" (
     echo %B%[*] Ставим пакеты для фронтенда...%Z%

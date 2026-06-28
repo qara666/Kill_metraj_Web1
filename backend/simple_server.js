@@ -937,6 +937,7 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 
       
       const ensureTable = async (name, fn) => {
+          if (process.env.USE_SQLITE === 'true') return; // Sequelize handles SQLite tables natively
           try { await fn(); } catch (e) { logger.error(` [INIT] Failed to ensure table ${name}`, e); }
       };
 
