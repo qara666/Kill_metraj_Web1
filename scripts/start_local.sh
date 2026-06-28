@@ -31,10 +31,17 @@ trap cleanup SIGINT SIGTERM
 cd backend
 
 # Устанавливаем зависимости если нужно
+# Устанавливаем зависимости если нужно
 if [ ! -d "node_modules" ]; then
     echo "Установка зависимостей backend..."
     npm install
+elif [ ! -d "node_modules/sqlite3" ]; then
+    echo "Доустанавливаем драйвер SQLite..."
+    npm install sqlite3
 fi
+
+# Включаем SQLite для локальной разработки без PostgreSQL
+export USE_SQLITE=true
 
 # Запускаем backend в режиме авто-перезагрузки
 echo "Запуск backend..."
