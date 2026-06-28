@@ -134,6 +134,10 @@ let isPgListenConnecting = false;
  * Essential for Render/Production where connections may drop due to idle timeouts.
  */
 async function setupPgNotify() {
+  if (process.env.USE_SQLITE === 'true') {
+    logger.info('[PG-LISTEN] SQLite mode active - skipping Postgres LISTEN/NOTIFY');
+    return;
+  }
   if (isPgListenConnecting) return;
   isPgListenConnecting = true;
 

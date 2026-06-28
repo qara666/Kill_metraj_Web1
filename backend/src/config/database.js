@@ -13,6 +13,8 @@ const poolConfig = {
   evict: 5000
 };
 
+const useSqlite = process.env.USE_SQLITE === 'true';
+
 const sequelize = process.env.DATABASE_URL
   ? new Sequelize(process.env.DATABASE_URL, {
     dialect: 'postgres',
@@ -25,7 +27,12 @@ const sequelize = process.env.DATABASE_URL
     },
     pool: poolConfig
   })
-  : new Sequelize({
+  : (useSqlite ? new Sequelize({
+      dialect: 'sqlite',
+      storage: './database.sqlite',
+      logging: false,
+      pool: poolConfig
+  }) : new Sequelize({
     host: process.env.DB_HOST || 'localhost',
     port: parseInt(process.env.DB_PORT || '5432'),
     database: process.env.DB_NAME || 'kill_metraj',
@@ -34,7 +41,7 @@ const sequelize = process.env.DATABASE_URL
     dialect: 'postgres',
     logging: false,
     pool: poolConfig
-  });
+  }));
 
 const { rlsContextStore } = require('../utils/context');
 
@@ -49,6 +56,8 @@ async function testConnection() {
 }
 
 sequelize.addHook('beforeQuery', async (options, query) => {
+  if (sequelize.getDialect() === 'sqlite') return; // RLS not supported in SQLite
+
   const context = rlsContextStore.getStore();
   if (!context) return;
 

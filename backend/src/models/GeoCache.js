@@ -39,7 +39,7 @@ const GeoCache = sequelize.define('GeoCache', {
         allowNull: true
     },
     types: {
-        type: DataTypes.ARRAY(DataTypes.TEXT), // массив строк, например ['street_address']
+        type: DataTypes.JSONB, // Изменено с ARRAY для поддержки SQLite
         allowNull: true
     },
     is_success: {

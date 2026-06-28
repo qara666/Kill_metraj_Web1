@@ -22,6 +22,7 @@ echo.
 if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
     echo %G%[+] Используем скачанный портативный Node.js. Запуск...%Z%
     set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+    set "USE_SQLITE=true"
     goto :START_NODE
 )
 
@@ -59,7 +60,8 @@ if exist ".portable-node-installer\node.zip" (
 )
 
 set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
-echo %G%[+] Готово! Теперь всё запустится.%Z%
+set "USE_SQLITE=true"
+echo %G%[+] Готово! Теперь всё запустится (с локальной базой).%Z%
 goto :START_NODE
 
 
