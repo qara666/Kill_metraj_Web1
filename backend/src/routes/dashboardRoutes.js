@@ -466,13 +466,15 @@ router.post('/dashboard/fetch', async (req, res) => {
                 { replacements: { payload: JSON.stringify(payload), dataHash, divisionId: String(deptId), targetDate: targetDateISO, orderCount, courierCount } }
             );
 
-            // Уведомление WebSocket клиентов через PG Notify (всегда — UI нуждается в сигнале обновления)
-            await sequelize.query("SELECT pg_notify('dashboard_update', :notifyData)", {
-                replacements: {
-                    notifyData: JSON.stringify({ divisionId: deptId, targetDate: targetDateISO, orderCount, courierCount, source: 'on_demand_fetch' })
-                },
-                type: sequelize.QueryTypes.SELECT
-            });
+            // Уведомление WebSocket клиентов через PG Notify (только для Postgres)
+            if (process.env.USE_SQLITE !== 'true') {
+                await sequelize.query("SELECT pg_notify('dashboard_update', :notifyData)", {
+                    replacements: {
+                        notifyData: JSON.stringify({ divisionId: deptId, targetDate: targetDateISO, orderCount, courierCount, source: 'on_demand_fetch' })
+                    },
+                    type: sequelize.QueryTypes.SELECT
+                });
+            }
 
             // v7.8 ИСПРАВЛЕНИЕ: Запускать пересчет робота только когда данные заказов/курьеров реально изменились
             if (dataActuallyChanged && global.turboCalculator && typeof global.turboCalculator.notifyNewFOData === 'function') {

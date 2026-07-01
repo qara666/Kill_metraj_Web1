@@ -11,33 +11,32 @@
  */
 
 const axios = require('axios');
-const { Pool } = require('pg');
 const cron = require('node-cron');
 const logger = require('../src/utils/logger');
+const { sequelize } = require('../src/config/database');
+
+// Адаптер pg.Pool через Sequelize для совместимости с SQLite
+const makePool = () => ({
+    query: async (sql, params = []) => {
+        const dialect = sequelize.getDialect();
+        let finalSql = sql;
+        if (dialect === 'sqlite') {
+            finalSql = sql.replace(/\$\d+/g, '?');
+        }
+        const [rows] = await sequelize.query(finalSql, {
+            replacements: params,
+            raw: true,
+            type: sequelize.QueryTypes.SELECT
+        });
+        return { rows: Array.isArray(rows) ? rows : [] };
+    },
+    end: async () => {}
+});
 
 class OrderCalculator {
     constructor() {
-        // Database connection
-        const poolConfig = process.env.DATABASE_URL
-            ? {
-                connectionString: process.env.DATABASE_URL,
-                ssl: { require: true, rejectUnauthorized: false },
-                max: 5,
-                idleTimeoutMillis: 30000,
-                connectionTimeoutMillis: 5000
-            }
-            : {
-                host: process.env.DB_HOST || 'localhost',
-                port: parseInt(process.env.DB_PORT || '5432'),
-                database: process.env.DB_NAME || 'yapiko_auto_km',
-                user: process.env.DB_USER || 'msun',
-                password: process.env.DB_PASSWORD || '1234',
-                max: 5,
-                idleTimeoutMillis: 30000,
-                connectionTimeoutMillis: 5000
-            };
+        this.pool = makePool();
 
-        this.pool = new Pool(poolConfig);
 
         // Configuration
         this.calculationInterval = parseInt(process.env.ORDER_CALC_INTERVAL || '30000'); // 30 seconds

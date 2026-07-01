@@ -25,6 +25,7 @@ setImmediate(() => selfHostRoutingHealth.probeAll().catch(() => {}));
 const { generalLimiter, strictLimiter, uploadLimiter, telegramLimiter } = require('./src/middleware/rateLimiter');
 const { sequelize, testConnection } = require('./src/config/database');
 const { syncDatabase, AuditLog, DashboardCache } = require('./src/models');
+const { initSQLiteTables } = require('./sqliteInit');
 const { authenticateToken } = require('./src/middleware/auth');
 const { register: metricsRegister, metricsMiddleware, trackWebSocketConnection } = require('./src/middleware/metrics');
 const { errorHandler, notFoundHandler } = require('./src/middleware/errorHandler');
@@ -902,14 +903,11 @@ httpServer.listen(PORT, '0.0.0.0', () => {
         await syncDatabase();
       }
 
-      // v5.180: Production migration
-      if (process.env.NODE_ENV === 'production') {
+      // v5.180: Production migration (skip in SQLite mode)
+      if (process.env.NODE_ENV === 'production' && process.env.USE_SQLITE !== 'true') {
         try {
           await sequelize.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS "allowedTabs" JSON DEFAULT '["dashboard","routes","couriers","financials","analytics","telegram-parsing","settings"]'`);
-          
-          // v39.3: Add centroid column to KML zones
           await sequelize.query(`ALTER TABLE api_kml_zones ADD COLUMN IF NOT EXISTS centroid JSONB DEFAULT NULL`);
-          
           logger.info(`[OK] [INIT] Migrations applied`);
         } catch (err) {
           logger.warn(' [INIT] Migration skipped or failed', { error: err.message });
@@ -936,22 +934,26 @@ httpServer.listen(PORT, '0.0.0.0', () => {
       // v38.2: setupPgNotify is now called inside the init block above
 
       
-      const ensureTable = async (name, fn) => {
-          if (process.env.USE_SQLITE === 'true') return; // Sequelize handles SQLite tables natively
-          try { await fn(); } catch (e) { logger.error(` [INIT] Failed to ensure table ${name}`, e); }
-      };
-
-      await ensureTable('DashboardCache', ensureDashboardCacheTable);
-      await ensureTable('StatusHistory', ensureStatusHistoryTable);
-      await ensureTable('DivisionIdCol', ensureDivisionIdColumn);
-      await ensureTable('ManualOverrides', ensureManualOverridesTable);
-      await ensureTable('GlobalOverrides', ensureGlobalOrderOverridesTable);
-      await ensureTable('Routes', ensureRoutesTable);
-      await ensureTable('Indexes', ensureIndexes);
-      await ensureTable('KmlHubs', ensureKmlHubsTable);
-      await ensureTable('KmlZones', ensureKmlZonesTable);
-      await ensureTable('DashboardCacheV2', ensureDashboardCacheV2);
-      await ensureTable('DashboardDivisionStates', ensureDashboardDivisionStatesTable);
+      if (process.env.USE_SQLITE === 'true') {
+          // SQLite: создаём все таблицы через чистый SQLite SQL
+          await initSQLiteTables();
+      } else {
+          // Postgres: используем оригинальные ensureTable функции
+          const ensureTable = async (name, fn) => {
+              try { await fn(); } catch (e) { logger.error(` [INIT] Failed to ensure table ${name}`, e); }
+          };
+          await ensureTable('DashboardCache', ensureDashboardCacheTable);
+          await ensureTable('StatusHistory', ensureStatusHistoryTable);
+          await ensureTable('DivisionIdCol', ensureDivisionIdColumn);
+          await ensureTable('ManualOverrides', ensureManualOverridesTable);
+          await ensureTable('GlobalOverrides', ensureGlobalOrderOverridesTable);
+          await ensureTable('Routes', ensureRoutesTable);
+          await ensureTable('Indexes', ensureIndexes);
+          await ensureTable('KmlHubs', ensureKmlHubsTable);
+          await ensureTable('KmlZones', ensureKmlZonesTable);
+          await ensureTable('DashboardCacheV2', ensureDashboardCacheV2);
+          await ensureTable('DashboardDivisionStates', ensureDashboardDivisionStatesTable);
+      }
       
       // Clear geo cache to get rid of bad coordinates
       try {
@@ -986,10 +988,14 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 
 
       try {
-        const DashboardFetcher = require('./workers/dashboardFetcher');
-        const fetcher = new DashboardFetcher();
-        fetcher.start();
-        logger.info(' [INIT] DashboardFetcher started');
+        if (process.env.USE_SQLITE === 'true') {
+            logger.info(' [INIT] DashboardFetcher skipped (requires Postgres)');
+        } else {
+            const DashboardFetcher = require('./workers/dashboardFetcher');
+            const fetcher = new DashboardFetcher();
+            fetcher.start();
+            logger.info(' [INIT] DashboardFetcher started');
+        }
       } catch (fe) { logger.error(' [INIT] DashboardFetcher failed', fe); }
 
       try {
