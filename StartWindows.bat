@@ -2,6 +2,11 @@
 setlocal enabledelayedexpansion
 title Kill-Metraj Launcher
 
+:: ── 0. KILL ZOMBIES ──────────────────────────────────────────────
+:: Kill any leftover Node.js processes from previous crashes to free up locked files and ports.
+echo [*] Cleaning up old processes...
+taskkill /F /IM node.exe >nul 2>nul
+
 echo.
 echo  ===========================================================
 echo   Kill-Metraj Local Launcher  (SQLite, no install needed)
@@ -9,16 +14,19 @@ echo  ===========================================================
 echo.
 
 :: ── 1. Find Node.js ──────────────────────────────────────────────
+set "NODE_OK=0"
 
-if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
+if exist "%CD%\.portable-node\node-v20.14.0-win-x64\node.exe" (
     echo [OK] Portable Node.js found.
     set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+    set "NODE_OK=1"
     goto :CHECK_DEPS
 )
 
 where node >nul 2>nul
 if %errorlevel% equ 0 (
     echo [OK] Node.js found in PATH.
+    set "NODE_OK=1"
     goto :CHECK_DEPS
 )
 
@@ -34,16 +42,28 @@ echo [*] Extracting bundled portable Node.js (100%% offline)...
 if not exist ".portable-node" mkdir ".portable-node"
 
 if exist ".portable-node-installer\node.zip" (
+    :: Use -Force but handle locked files better by having killed them above
     powershell -NoProfile -Command "Expand-Archive -Path '.portable-node-installer\node.zip' -DestinationPath '.portable-node' -Force"
+    if !errorlevel! neq 0 (
+        echo [ERROR] Failed to extract archive! Make sure no files are locked.
+        pause
+        exit /b 1
+    )
 ) else (
     echo [ERROR] Offline archive not found! Contact developer.
     pause
     exit /b 1
 )
 
-set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
-echo [OK] Extracted! Ready to launch with local database.
-goto :CHECK_DEPS
+if exist "%CD%\.portable-node\node-v20.14.0-win-x64\node.exe" (
+    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+    echo [OK] Extracted! Ready to launch with local database.
+    goto :CHECK_DEPS
+) else (
+    echo [ERROR] Extraction completed but node.exe not found!
+    pause
+    exit /b 1
+)
 
 
 :: ── DOCKER ───────────────────────────────────────────────────────
@@ -73,7 +93,7 @@ if not exist "backend\node_modules" (
     echo [*] Installing backend packages...
     cd backend
     call npm install --no-fund --no-audit
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo [ERROR] Backend npm install failed!
         cd ..
         pause
@@ -93,7 +113,7 @@ if not exist "frontend\node_modules" (
     echo [*] Installing frontend packages...
     cd frontend
     call npm install --no-fund --no-audit
-    if %errorlevel% neq 0 (
+    if !errorlevel! neq 0 (
         echo [ERROR] Frontend npm install failed!
         cd ..
         pause
@@ -140,9 +160,9 @@ set ATTEMPT=0
 
 :WAIT_LOOP
 set /a ATTEMPT+=1
-if %ATTEMPT% GTR 60 goto :OPEN_BROWSER
+if !ATTEMPT! GTR 60 goto :OPEN_BROWSER
 powershell -NoProfile -Command "try{Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
-if %errorlevel% equ 0 goto :OPEN_BROWSER
+if !errorlevel! equ 0 goto :OPEN_BROWSER
 timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP
 

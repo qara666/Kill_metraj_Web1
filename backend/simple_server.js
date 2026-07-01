@@ -1062,12 +1062,6 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   } catch (dbError) {
     logger.error('КРИТИЧЕСКАЯ ОШИБКА: Ошибка инициализации базы данных, сервер продолжает работу для отображения логов', { error: dbError.message });
   }
-
-  try {
-    grpcServer = startGrpcServer(process.env.GRPC_PORT || '50051');
-  } catch (grpcError) {
-    logger.error('Не удалось запустить gRPC сервер', grpcError);
-  }
   })();
 });
 
