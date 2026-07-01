@@ -28,10 +28,22 @@ if %errorlevel% equ 0 (
     goto :START_DOCKER
 )
 
-echo [ERROR] Node.js not found. Install from https://nodejs.org/
-echo.
-pause
-exit /b 1
+echo [INFO] Node.js and Docker not found.
+echo [*] Extracting bundled portable Node.js (100%% offline)...
+
+if not exist ".portable-node" mkdir ".portable-node"
+
+if exist ".portable-node-installer\node.zip" (
+    powershell -NoProfile -Command "Expand-Archive -Path '.portable-node-installer\node.zip' -DestinationPath '.portable-node' -Force"
+) else (
+    echo [ERROR] Offline archive not found! Contact developer.
+    pause
+    exit /b 1
+)
+
+set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
+echo [OK] Extracted! Ready to launch with local database.
+goto :CHECK_DEPS
 
 
 :: ── DOCKER ───────────────────────────────────────────────────────
