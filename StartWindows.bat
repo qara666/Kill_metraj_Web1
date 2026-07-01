@@ -1,33 +1,34 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 > nul
-title Kill-Metraj Запуск
+title Kill-Metraj Launcher
 
-echo ==========================================================
-echo   Автоматический запуск Kill-Metraj (SQLite, без установки)
-echo ==========================================================
+echo.
+echo  ===========================================================
+echo   Kill-Metraj Local Launcher  (SQLite, no install needed)
+echo  ===========================================================
 echo.
 
-:: ── 1. Ищем Node.js ──────────────────────────────────────────────
+:: ── 1. Find Node.js ──────────────────────────────────────────────
+
 if exist ".portable-node\node-v20.14.0-win-x64\node.exe" (
-    echo [+] Портативный Node.js найден. Используем его.
+    echo [OK] Portable Node.js found.
     set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
     goto :CHECK_DEPS
 )
 
 where node >nul 2>nul
 if %errorlevel% equ 0 (
-    echo [+] Node.js найден в системе.
+    echo [OK] Node.js found in PATH.
     goto :CHECK_DEPS
 )
 
 where docker >nul 2>nul
 if %errorlevel% equ 0 (
-    echo [~] Node.js не найден, но найден Docker. Запускаем через Docker...
+    echo [INFO] Node.js not found, using Docker...
     goto :START_DOCKER
 )
 
-echo [ERROR] Node.js не найден! Установите Node.js с https://nodejs.org/
+echo [ERROR] Node.js not found. Install from https://nodejs.org/
 echo.
 pause
 exit /b 1
@@ -37,54 +38,51 @@ exit /b 1
 :START_DOCKER
 docker-compose up --build -d
 if %errorlevel% neq 0 (
-    echo [ERROR] Docker упал при запуске!
+    echo [ERROR] Docker failed to start!
     pause
     exit /b 1
 )
 echo.
-echo   Сайт : http://localhost:80
+echo   Site : http://localhost:80
 echo   API  : http://localhost:5001
 echo.
-echo Нажми любую кнопку для остановки...
+echo Press any key to stop...
 pause >nul
 docker-compose down
 exit /b 0
 
 
-:: ── ПРОВЕРКА И УСТАНОВКА ЗАВИСИМОСТЕЙ ───────────────────────────
+:: ── DEPS ─────────────────────────────────────────────────────────
 :CHECK_DEPS
 echo.
-echo [*] Проверяем зависимости...
+echo [*] Checking dependencies...
 
-:: Backend deps
 if not exist "backend\node_modules" (
-    echo [*] Устанавливаем зависимости backend...
+    echo [*] Installing backend packages...
     cd backend
     call npm install --no-fund --no-audit
     if %errorlevel% neq 0 (
-        echo [ERROR] npm install backend завершился с ошибкой!
+        echo [ERROR] Backend npm install failed!
         cd ..
         pause
         exit /b 1
     )
     cd ..
+) else (
+    if not exist "backend\node_modules\sqlite3" (
+        echo [*] Installing sqlite3 driver...
+        cd backend
+        call npm install sqlite3 --no-fund --no-audit
+        cd ..
+    )
 )
 
-:: SQLite driver
-if not exist "backend\node_modules\sqlite3" (
-    echo [*] Доустанавливаем sqlite3...
-    cd backend
-    call npm install sqlite3 --no-fund --no-audit
-    cd ..
-)
-
-:: Frontend deps
 if not exist "frontend\node_modules" (
-    echo [*] Устанавливаем зависимости frontend...
+    echo [*] Installing frontend packages...
     cd frontend
     call npm install --no-fund --no-audit
     if %errorlevel% neq 0 (
-        echo [ERROR] npm install frontend завершился с ошибкой!
+        echo [ERROR] Frontend npm install failed!
         cd ..
         pause
         exit /b 1
@@ -92,50 +90,46 @@ if not exist "frontend\node_modules" (
     cd ..
 )
 
-:: ── ГЕНЕРИРУЕМ ХЕЛПЕР-СКРИПТЫ ────────────────────────────────────
+
+:: ── GENERATE HELPER SCRIPTS ──────────────────────────────────────
 set "ROOT=%CD%"
 
-:: Пишем backend-helper.bat
-(
-echo @echo off
-echo title Backend ^(5001^)
-echo cd /d "%ROOT%\backend"
-echo set USE_SQLITE=true
-echo set PORT=5001
-echo npm run dev
-echo pause
-) > "%TEMP%\km_backend.bat"
+> "%TEMP%\km_backend.bat" (
+    echo @echo off
+    echo title Backend ^(port 5001^)
+    echo cd /d "%ROOT%\backend"
+    echo set "USE_SQLITE=true"
+    echo set "PORT=5001"
+    echo npm run dev
+    echo pause
+)
 
-:: Пишем frontend-helper.bat
-(
-echo @echo off
-echo title Frontend ^(5174^)
-echo cd /d "%ROOT%\frontend"
-echo npm run dev
-echo pause
-) > "%TEMP%\km_frontend.bat"
+> "%TEMP%\km_frontend.bat" (
+    echo @echo off
+    echo title Frontend ^(port 5174^)
+    echo cd /d "%ROOT%\frontend"
+    echo npm run dev
+    echo pause
+)
 
 
-:: ── ЗАПУСК ───────────────────────────────────────────────────────
+:: ── LAUNCH ───────────────────────────────────────────────────────
 echo.
-echo [*] Запускаем Backend и Frontend...
+echo [*] Starting Backend and Frontend...
 
-start "Backend (5001)" cmd /c "%TEMP%\km_backend.bat"
+start "Backend  (5001)" cmd /c "%TEMP%\km_backend.bat"
 start "Frontend (5174)" cmd /c "%TEMP%\km_frontend.bat"
 
 
-:: ── ЖДЁМ ПОКА ПОДНИМЕТСЯ ФРОНТЕНД ────────────────────────────────
+:: ── WAIT FOR SITE ────────────────────────────────────────────────
 echo.
-echo [*] Ждем запуска сайта (до 60 секунд)...
-set /a ATTEMPT=0
+echo [*] Waiting for site to start (up to 60 sec)...
+set ATTEMPT=0
 
 :WAIT_LOOP
 set /a ATTEMPT+=1
-if %ATTEMPT% GTR 60 (
-    echo [~] Таймаут — открываем браузер принудительно...
-    goto :OPEN_BROWSER
-)
-powershell -NoProfile -Command "try{$r=Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1;exit 0}catch{exit 1}" >nul 2>nul
+if %ATTEMPT% GTR 60 goto :OPEN_BROWSER
+powershell -NoProfile -Command "try{Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
 if %errorlevel% equ 0 goto :OPEN_BROWSER
 timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP
@@ -143,17 +137,20 @@ goto :WAIT_LOOP
 
 :OPEN_BROWSER
 echo.
-echo [+] Сайт готов! Открываю браузер...
+echo [OK] Site is ready! Opening browser...
 start "" "http://localhost:5174"
 
 echo.
-echo ==========================================================
-echo   ВСЁ ЗАПУЩЕНО
-echo   Сайт : http://localhost:5174
+echo  ===========================================================
+echo   ALL SYSTEMS GO
+echo   Site : http://localhost:5174
 echo   API  : http://localhost:5001
 echo.
-echo   Чтобы выключить - закрой окна Backend и Frontend
-echo ==========================================================
+echo   Login:    admin
+echo   Password: password2026
+echo.
+echo   To stop: close the Backend and Frontend windows
+echo  ===========================================================
 echo.
 pause
 exit /b 0
