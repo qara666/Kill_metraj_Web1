@@ -32,14 +32,30 @@ if !errorlevel! equ 1 goto :START_LAUNCH
 
 :UPDATE_GIT
 echo.
-echo [*] Pulling latest changes from GitHub...
-where git >nul 2>nul
+echo [*] Downloading latest update from GitHub (No Git required)...
+set "ZIP_URL=https://github.com/qara666/Kill_metraj_Web1/archive/refs/heads/main.zip"
+set "TEMP_DIR=%TEMP%\km_update"
+set "ZIP_FILE=%TEMP%\km_update.zip"
+
+if exist "%TEMP_DIR%" rmdir /S /Q "%TEMP_DIR%"
+if exist "%ZIP_FILE%" del /F /Q "%ZIP_FILE%"
+
+powershell -NoProfile -Command "Invoke-WebRequest -Uri '%ZIP_URL%' -OutFile '%ZIP_FILE%' -UseBasicParsing"
 if !errorlevel! neq 0 (
-    echo [ERROR] Git is not installed or not in PATH!
-) else (
-    git pull
-    echo [OK] Update complete.
+    echo [ERROR] Failed to download update. Check your internet connection.
+    pause
+    goto :MAIN_MENU
 )
+
+echo [*] Extracting update...
+powershell -NoProfile -Command "Expand-Archive -Path '%ZIP_FILE%' -DestinationPath '%TEMP_DIR%' -Force"
+
+echo [*] Applying update (keeping your database and .env safe)...
+robocopy "%TEMP_DIR%\Kill_metraj_Web1-main" "%CD%" /E /IS /IT /XF ".env" "database.sqlite" /XD ".git" ".portable-node" "node_modules" /NFL /NDL /NJH /NJS
+
+echo [OK] Update applied successfully!
+if exist "%TEMP_DIR%" rmdir /S /Q "%TEMP_DIR%"
+if exist "%ZIP_FILE%" del /F /Q "%ZIP_FILE%"
 pause
 goto :MAIN_MENU
 
@@ -72,13 +88,10 @@ echo [*] Initializing...
 
 :: ── 1. Find Node.js ──────────────────────────────────────────────
 set "NODE_OK=0"
+set "PORTABLE_NODE_DIR=%CD%\.portable-node\node-v20.14.0-win-x64"
+set "NPM_CMD=npm"
 
-if exist "%CD%\.portable-node\node-v20.14.0-win-x64\node.exe" (
-    echo [OK] Portable Node.js found.
-    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
-    set "NODE_OK=1"
-    goto :CHECK_DEPS
-)
+if exist "%PORTABLE_NODE_DIR%\node.exe" goto :USE_PORTABLE
 
 where node >nul 2>nul
 if %errorlevel% equ 0 (
@@ -99,7 +112,6 @@ echo [*] Extracting bundled portable Node.js (100%% offline)...
 if not exist ".portable-node" mkdir ".portable-node"
 
 if exist ".portable-node-installer\node.zip" (
-    :: Use -Force but handle locked files better by having killed them above
     powershell -NoProfile -Command "Expand-Archive -Path '.portable-node-installer\node.zip' -DestinationPath '.portable-node' -Force"
     if !errorlevel! neq 0 (
         echo [ERROR] Failed to extract archive! Make sure no files are locked.
@@ -112,15 +124,18 @@ if exist ".portable-node-installer\node.zip" (
     exit /b 1
 )
 
-if exist "%CD%\.portable-node\node-v20.14.0-win-x64\node.exe" (
-    set "PATH=%CD%\.portable-node\node-v20.14.0-win-x64;%PATH%"
-    echo [OK] Extracted! Ready to launch with local database.
-    goto :CHECK_DEPS
-) else (
+if not exist "%PORTABLE_NODE_DIR%\node.exe" (
     echo [ERROR] Extraction completed but node.exe not found!
     pause
     exit /b 1
 )
+
+:USE_PORTABLE
+echo [OK] Portable Node.js found.
+set "PATH=%PORTABLE_NODE_DIR%;%PATH%"
+set "NPM_CMD=%PORTABLE_NODE_DIR%\npm.cmd"
+set "NODE_OK=1"
+goto :CHECK_DEPS
 
 
 :: ── DOCKER ───────────────────────────────────────────────────────
@@ -149,7 +164,7 @@ echo [*] Checking dependencies...
 if not exist "backend\node_modules" (
     echo [*] Installing backend packages...
     cd backend
-    call npm install --no-fund --no-audit
+    call "%NPM_CMD%" install --no-fund --no-audit
     if !errorlevel! neq 0 (
         echo [ERROR] Backend npm install failed!
         cd ..
@@ -161,7 +176,7 @@ if not exist "backend\node_modules" (
     if not exist "backend\node_modules\sqlite3" (
         echo [*] Installing sqlite3 driver...
         cd backend
-        call npm install sqlite3 --no-fund --no-audit
+        call "%NPM_CMD%" install sqlite3 --no-fund --no-audit
         cd ..
     )
 )
@@ -169,7 +184,7 @@ if not exist "backend\node_modules" (
 if not exist "frontend\node_modules" (
     echo [*] Installing frontend packages...
     cd frontend
-    call npm install --no-fund --no-audit
+    call "%NPM_CMD%" install --no-fund --no-audit
     if !errorlevel! neq 0 (
         echo [ERROR] Frontend npm install failed!
         cd ..
