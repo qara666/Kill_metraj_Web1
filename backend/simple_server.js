@@ -918,15 +918,26 @@ httpServer.listen(PORT, '0.0.0.0', () => {
       try {
         const seedUsername = process.env.SEED_ADMIN_USERNAME || 'admin';
         const seedPassword = process.env.SEED_ADMIN_PASSWORD || 'password2026';
-        await User.findOrCreate({
+        const bcryptAdmin = require('bcryptjs');
+        const hashedSeedPwd = await bcryptAdmin.hash(seedPassword, 10);
+        const [adminUser, created] = await User.findOrCreate({
           where: { username: seedUsername },
           defaults: {
-            passwordHash: seedPassword,
+            passwordHash: hashedSeedPwd,
             email: process.env.SEED_ADMIN_EMAIL || 'admin@kill-metraj.com',
             role: 'admin', isActive: true, canModifySettings: true, divisionId: 'all'
           }
         });
-        logger.info(`[OK] [INIT] Admin account verified: ${seedUsername}`);
+        if (!created) {
+          // Обновляем пароль напрямую (bypass beforeSave hook чтобы не хешировать дважды)
+          await User.update(
+            { passwordHash: hashedSeedPwd },
+            { where: { username: seedUsername }, individualHooks: false }
+          );
+          logger.info(`[OK] [INIT] Admin password synced from .env: ${seedUsername}`);
+        } else {
+          logger.info(`[OK] [INIT] Admin account created: ${seedUsername}`);
+        }
       } catch (adminErr) {
         logger.error(' [INIT] Admin check failed', adminErr);
       }
