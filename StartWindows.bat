@@ -72,6 +72,11 @@ goto :START_NODE
 echo.
 echo %C%Запускаем базу, бэкенд и фронт через Docker...%Z%
 docker-compose up --build -d
+if %errorlevel% neq 0 (
+    echo %R%Ошибка при запуске Docker!%Z%
+    pause
+    exit /b 1
+)
 echo.
 echo %G%==========================================================
 echo   Всё поднято через Docker!
@@ -96,13 +101,15 @@ cd backend
 if not exist "node_modules" (
     echo %B%[*] Устанавливаем зависимости бэкенда...%Z%
     call npm install --no-fund --no-audit
-) else if not exist "node_modules\sqlite3" (
-    echo %B%[*] Доустанавливаем драйвер SQLite...%Z%
-    call npm install sqlite3 --no-fund --no-audit
+) else (
+    if not exist "node_modules\sqlite3" (
+        echo %B%[*] Доустанавливаем драйвер SQLite...%Z%
+        call npm install sqlite3 --no-fund --no-audit
+    )
 )
 cd ..
 
-if not exist "frontend\node_modules\" (
+if not exist "frontend\node_modules" (
     echo %B%[*] Ставим пакеты для фронтенда...%Z%
     cd frontend
     call npm install
@@ -113,8 +120,8 @@ echo.
 echo %C%Поднимаем серверы...%Z%
 set "ROOT_DIR=%CD%"
 
-start "Бэкенд (порт 5001)" cmd /k "title Бэкенд && cd /d %ROOT_DIR%\backend && npm run dev"
-start "Фронтенд (порт 5174)" cmd /k "title Фронтенд && cd /d %ROOT_DIR%\frontend && npm run dev"
+start "Backend (5001)" cmd /k "title Backend && cd /d "%ROOT_DIR%\backend" && npm run dev"
+start "Frontend (5174)" cmd /k "title Frontend && cd /d "%ROOT_DIR%\frontend" && npm run dev"
 
 echo.
 echo %B%[*] Ждем, пока проснется сайт...%Z%
