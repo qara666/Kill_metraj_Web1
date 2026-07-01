@@ -324,7 +324,7 @@ router.post('/dashboard/fetch', async (req, res) => {
 
         // 2. Загрузка из внешнего API
         const apiUrl = process.env.EXTERNAL_API_URL || 'http://app.yaposhka.kh.ua:4999/api/v1/dashboard';
-        const apiKey = process.env.EXTERNAL_API_KEY || 'killmetraj_secret_key_2024';
+        const apiKey = process.env.EXTERNAL_API_KEY || 'KMFh23298&23201)8172^&21Vs@gfgsd';
         const params = {
             top: '2000',
             timeDeliveryBeg: `${targetDateStr} 00:00:00`,

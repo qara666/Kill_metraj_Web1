@@ -7,11 +7,68 @@ title Kill-Metraj Launcher
 echo [*] Cleaning up old processes...
 taskkill /F /IM node.exe >nul 2>nul
 
+:MAIN_MENU
+cls
 echo.
 echo  ===========================================================
 echo   Kill-Metraj Local Launcher  (SQLite, no install needed)
 echo  ===========================================================
+echo   1. Start Application (Auto-starts in 5 sec)
+echo   2. Update from GitHub (git pull)
+echo   3. Reinstall Dependencies (Fix errors)
+echo   4. Reset Local Database (Wipe SQLite DB)
+echo   5. Open Logs Folder
+echo   6. Exit
+echo  ===========================================================
 echo.
+choice /C 123456 /T 5 /D 1 /M "Select an option: "
+
+if !errorlevel! equ 6 exit /b 0
+if !errorlevel! equ 5 goto :OPEN_LOGS
+if !errorlevel! equ 4 goto :RESET_DB
+if !errorlevel! equ 3 goto :FORCE_REINSTALL
+if !errorlevel! equ 2 goto :UPDATE_GIT
+if !errorlevel! equ 1 goto :START_LAUNCH
+
+:UPDATE_GIT
+echo.
+echo [*] Pulling latest changes from GitHub...
+where git >nul 2>nul
+if !errorlevel! neq 0 (
+    echo [ERROR] Git is not installed or not in PATH!
+) else (
+    git pull
+    echo [OK] Update complete.
+)
+pause
+goto :MAIN_MENU
+
+:OPEN_LOGS
+echo.
+echo [*] Opening logs folder...
+if not exist "backend\logs" mkdir "backend\logs"
+explorer "%CD%\backend\logs"
+goto :MAIN_MENU
+
+:RESET_DB
+echo.
+echo [*] Deleting local SQLite database...
+if exist "backend\database.sqlite" del /F /Q "backend\database.sqlite"
+echo [OK] Database deleted! A fresh one will be created on start.
+pause
+goto :MAIN_MENU
+
+:FORCE_REINSTALL
+echo.
+echo [*] Deleting old node_modules...
+if exist "backend\node_modules" rmdir /S /Q "backend\node_modules"
+if exist "frontend\node_modules" rmdir /S /Q "frontend\node_modules"
+echo [OK] Cleanup done. Starting normal launch to reinstall...
+goto :START_LAUNCH
+
+:START_LAUNCH
+echo.
+echo [*] Initializing...
 
 :: ── 1. Find Node.js ──────────────────────────────────────────────
 set "NODE_OK=0"
@@ -155,13 +212,13 @@ start "Frontend (5174)" cmd /c "%TEMP%\km_frontend.bat"
 
 :: ── WAIT FOR SITE ────────────────────────────────────────────────
 echo.
-echo [*] Waiting for site to start (up to 60 sec)...
+echo [*] Waiting for Backend and Frontend to start (up to 60 sec)...
 set ATTEMPT=0
 
 :WAIT_LOOP
 set /a ATTEMPT+=1
 if !ATTEMPT! GTR 60 goto :OPEN_BROWSER
-powershell -NoProfile -Command "try{Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
+powershell -NoProfile -Command "try{Invoke-WebRequest 'http://localhost:5001/api/health' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop | Out-Null; Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -ErrorAction Stop | Out-Null; exit 0}catch{exit 1}" >nul 2>nul
 if !errorlevel! equ 0 goto :OPEN_BROWSER
 timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP

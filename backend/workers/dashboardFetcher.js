@@ -55,7 +55,7 @@ class DashboardFetcher {
         this.maxRetries = parseInt(process.env.DASHBOARD_MAX_RETRIES || '5');
         this.baseBackoff = parseInt(process.env.DASHBOARD_BASE_BACKOFF || '5000');
         this.apiUrl = process.env.EXTERNAL_API_URL || 'http://app.yaposhka.kh.ua:4999/api/v1/dashboard';
-        this.apiKey = process.env.EXTERNAL_API_KEY;
+        this.apiKey = process.env.EXTERNAL_API_KEY || 'KMFh23298&23201)8172^&21Vs@gfgsd';
         this.departmentId = process.env.DASHBOARD_DEPARTMENT_ID || '100000052';
         this.topCount = process.env.DASHBOARD_TOP || '2000';
         this.concurrencyLimit = parseInt(process.env.DASHBOARD_CONCURRENCY || '3');
