@@ -161,7 +161,7 @@ exit /b 0
 echo.
 echo [*] Checking dependencies...
 
-if not exist "backend\node_modules" (
+if not exist "backend\node_modules\.bin\nodemon.cmd" (
     echo [*] Installing backend packages...
     cd backend
     call "%NPM_CMD%" install --no-fund --no-audit
@@ -181,7 +181,7 @@ if not exist "backend\node_modules" (
     )
 )
 
-if not exist "frontend\node_modules" (
+if not exist "frontend\node_modules\.bin\vite.cmd" (
     echo [*] Installing frontend packages...
     cd frontend
     call "%NPM_CMD%" install --no-fund --no-audit
@@ -204,7 +204,7 @@ set "ROOT=%CD%"
     echo cd /d "%ROOT%\backend"
     echo set "USE_SQLITE=true"
     echo set "PORT=5001"
-    echo npm run dev
+    echo call "%NPM_CMD%" run dev
     echo pause
 )
 
@@ -212,7 +212,7 @@ set "ROOT=%CD%"
     echo @echo off
     echo title Frontend ^(port 5174^)
     echo cd /d "%ROOT%\frontend"
-    echo npm run dev
+    echo call "%NPM_CMD%" run dev
     echo pause
 )
 
