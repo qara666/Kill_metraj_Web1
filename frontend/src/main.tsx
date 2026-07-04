@@ -27,7 +27,8 @@ const Toaster = React.lazy(() =>
   import('react-hot-toast').then(mod => ({ default: mod.Toaster }))
 )
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const root = ReactDOM.createRoot(document.getElementById('root')!)
+root.render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <ErrorBoundary>
@@ -72,3 +73,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </React.StrictMode>,
 )
+
+// Hide splash screen once React has mounted
+const splash = document.getElementById('splash')
+if (splash) {
+  splash.classList.add('hidden')
+  setTimeout(() => splash.remove(), 500)
+}

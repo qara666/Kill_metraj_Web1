@@ -10,6 +10,9 @@ import type {
     AuditLog
 } from '../../types/auth'
 
+// Global: fail fast if backend is unreachable
+axios.defaults.timeout = 10000
+
 // Токены
 const TOKEN_KEY = 'km_access_token'
 const REFRESH_TOKEN_KEY = 'km_refresh_token'
@@ -62,11 +65,11 @@ export const authService = {
             if (!token) return null
 
             this.setAuthHeader(token)
-            const response = await axios.get(`${API_URL}/api/auth/me`)
+            const response = await axios.get(`${API_URL}/api/auth/me`, { timeout: 5000 })
 
             return response.data.success ? response.data.data : null
         } catch (error) {
-            console.error('Get current user error:', error)
+            // On timeout or connection error, return null → redirect to login (don't hang)
             return null
         }
     },
