@@ -1,39 +1,50 @@
 @echo off
 title Kill-Metraj Simple Launcher
-
 echo ==============================================
 echo   KILL-METRAJ ULTRA SIMPLE LAUNCHER
 echo ==============================================
 echo.
 
-:: 1. Убиваем старые процессы, если они зависли
 taskkill /F /IM node.exe >nul 2>nul
 
-:: 2. Подключаем портативный Node.js, если он есть
-set "PORTABLE_NODE=%CD%\.portable-node\node-v20.14.0-win-x64"
-if exist "%PORTABLE_NODE%\node.exe" (
-    set "PATH=%PORTABLE_NODE%;%PATH%"
+set "ROOT=%CD%"
+set "PORTABLE_NODE=%ROOT%\.portable-node\node-v20.14.0-win-x64"
+
+:: Find NPM
+set "NPM_EXEC=npm"
+if exist "%PORTABLE_NODE%\npm.cmd" (
+    set "NPM_EXEC=%PORTABLE_NODE%\npm.cmd"
 )
 
-:: 3. Запускаем Бэкенд
 echo [*] Starting Backend...
-start "Backend (5001)" cmd /k "cd backend && set USE_SQLITE=true && set PORT=5001 && npm run dev"
+(
+    echo @echo off
+    echo title Backend (5001)
+    echo cd /d "%ROOT%\backend"
+    echo set USE_SQLITE=true
+    echo set PORT=5001
+    echo call "%NPM_EXEC%" run dev
+    echo pause
+) > "%TEMP%\start_back.bat"
+start "Backend (5001)" cmd /k "%TEMP%\start_back.bat"
 
-:: 4. Запускаем Фронтенд
 echo [*] Starting Frontend...
-start "Frontend (5174)" cmd /k "cd frontend && npm run dev"
+(
+    echo @echo off
+    echo title Frontend (5174)
+    echo cd /d "%ROOT%\frontend"
+    echo call "%NPM_EXEC%" run dev
+    echo pause
+) > "%TEMP%\start_front.bat"
+start "Frontend (5174)" cmd /k "%TEMP%\start_front.bat"
 
-:: 5. Просто ждем 8 секунд без всяких проверок
-echo [*] Waiting 8 seconds for servers to wake up...
+echo [*] Waiting 8 seconds...
 timeout /t 8 /nobreak >nul
 
-:: 6. Открываем браузер
 echo [*] Opening site...
 start http://127.0.0.1:5174
 
-echo.
 echo ==============================================
-echo   Сайт открыт! 
-echo   Логин: admin / Пароль: password2026
+echo   Site should be open now!
 echo ==============================================
 pause

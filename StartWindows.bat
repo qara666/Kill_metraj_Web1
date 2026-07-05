@@ -151,34 +151,28 @@ if not exist "frontend\node_modules\.bin\vite.cmd" (
 )
 
 :: ──────────────────────────────────────────────────────────────────
-:: Write helper scripts — use SETLOCAL/ENDLOCAL trick to write the
-:: exact npm path without Windows mangling the percent signs
-set "ROOT=%CD%"
-set "NPM_PATH=!NPM_BIN!"
-
-(
-    echo @echo off
-    echo title Backend ^(port 5001^)
-    echo cd /d "!ROOT!\backend"
-    echo set "USE_SQLITE=true"
-    echo set "PORT=5001"
-    echo "!NPM_PATH!" run dev
-    echo pause
-) > "%TEMP%\km_backend.bat"
-
-(
-    echo @echo off
-    echo title Frontend ^(port 5174^)
-    echo cd /d "!ROOT!\frontend"
-    echo "!NPM_PATH!" run dev
-    echo pause
-) > "%TEMP%\km_frontend.bat"
-
-:: ──────────────────────────────────────────────────────────────────
 echo.
 echo [*] Launching servers...
-start "Backend  (5001)" cmd /k "%TEMP%\km_backend.bat"
-start "Frontend (5174)" cmd /k "%TEMP%\km_frontend.bat"
+set "ROOT=%CD%"
+
+(
+    echo @echo off
+    echo title Backend ^(5001^)
+    echo cd /d "!ROOT!\backend"
+    echo set USE_SQLITE=true
+    echo set PORT=5001
+    echo call "!NPM_BIN!" run dev
+) > "run_backend.bat"
+
+(
+    echo @echo off
+    echo title Frontend ^(5174^)
+    echo cd /d "!ROOT!\frontend"
+    echo call "!NPM_BIN!" run dev
+) > "run_frontend.bat"
+
+start "Backend  (5001)" cmd /k "run_backend.bat"
+start "Frontend (5174)" cmd /k "run_frontend.bat"
 
 echo [*] Waiting (up to 90 sec) for both servers...
 set ATTEMPT=0
