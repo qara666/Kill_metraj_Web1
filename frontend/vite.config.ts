@@ -12,12 +12,17 @@ export default defineConfig({
   server: {
     port: 5174,
     strictPort: true,
-    host: true,
+    host: '127.0.0.1',
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'http://127.0.0.1:5001',
         changeOrigin: true,
         secure: false,
+      },
+      '/socket.io': {
+        target: 'http://127.0.0.1:5001',
+        changeOrigin: true,
+        ws: true,
       },
     },
   },
@@ -35,8 +40,7 @@ export default defineConfig({
     },
   },
   esbuild: {
-    drop: ['console', 'debugger'],
-    pure: ['console.log', 'console.info', 'console.debug'],
+    // Only drop console in production builds, not in dev
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'react-router-dom', 'clsx', 'zustand'],
