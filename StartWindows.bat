@@ -130,6 +130,11 @@ echo.
 echo [*] Checking dependencies...
 
 if not exist "backend\node_modules\.bin\nodemon.cmd" (
+    :: 1 - Clean start
+    echo [*] Cleaning up old processes...
+    taskkill /F /FI "WINDOWTITLE eq Backend*" >nul 2>nul
+    taskkill /F /FI "WINDOWTITLE eq Frontend*" >nul 2>nul
+    taskkill /F /IM node.exe >nul 2>nul
     echo [*] Installing backend packages...
     cd backend
     call "!NPM_BIN!" install --no-fund --no-audit
@@ -162,6 +167,7 @@ set "ROOT=%CD%"
     echo set USE_SQLITE=true
     echo set PORT=5001
     echo call "!NPM_BIN!" run dev
+    echo pause
 ) > "run_backend.bat"
 
 (
@@ -169,6 +175,7 @@ set "ROOT=%CD%"
     echo title Frontend ^(5174^)
     echo cd /d "!ROOT!\frontend"
     echo call "!NPM_BIN!" run dev
+    echo pause
 ) > "run_frontend.bat"
 
 start "Backend  (5001)" cmd /k "run_backend.bat"
