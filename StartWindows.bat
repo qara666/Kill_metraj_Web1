@@ -158,7 +158,7 @@ set "NPM_PATH=!NPM_BIN!"
 
 (
     echo @echo off
-    echo title Backend (port 5001)
+    echo title Backend ^(port 5001^)
     echo cd /d "!ROOT!\backend"
     echo set "USE_SQLITE=true"
     echo set "PORT=5001"
@@ -168,7 +168,7 @@ set "NPM_PATH=!NPM_BIN!"
 
 (
     echo @echo off
-    echo title Frontend (port 5174)
+    echo title Frontend ^(port 5174^)
     echo cd /d "!ROOT!\frontend"
     echo "!NPM_PATH!" run dev
     echo pause
@@ -186,8 +186,8 @@ set ATTEMPT=0
 set /a ATTEMPT+=1
 if !ATTEMPT! GTR 90 goto :OPEN_BROWSER
 powershell -NoProfile -Command ^
-  "try{ Invoke-WebRequest 'http://localhost:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; " ^
-  "Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; exit 0 }catch{ exit 1 }" >nul 2>nul
+  "try{ Invoke-WebRequest 'http://127.0.0.1:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; " ^
+  "Invoke-WebRequest 'http://127.0.0.1:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; exit 0 }catch{ exit 1 }" >nul 2>nul
 if !errorlevel! equ 0 goto :OPEN_BROWSER
 timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP
@@ -196,12 +196,12 @@ goto :WAIT_LOOP
 echo.
 echo  ===========================================================
 echo   READY
-echo   Site     : http://localhost:5174
-echo   API      : http://localhost:5001
+echo   Site     : http://127.0.0.1:5174
+echo   API      : http://127.0.0.1:5001
 echo   Login    : admin
 echo   Password : password2026
 echo  ===========================================================
 echo.
-start "" "http://localhost:5174"
+start "" "http://127.0.0.1:5174"
 pause
 exit /b 0
