@@ -8,18 +8,24 @@ taskkill /F /IM node.exe >nul 2>nul
 :MAIN_MENU
 cls
 echo.
-echo  ===========================================================
-echo   Kill-Metraj Local Launcher
-echo  ===========================================================
-echo   1. Start Application  (auto in 5 sec)
-echo   2. Update from GitHub (no Git needed)
-echo   3. Reinstall Dependencies
-echo   4. Reset Database (wipe SQLite)
-echo   5. Open Logs Folder
-echo   6. Exit
-echo  ===========================================================
+echo   =================================================================
+echo   ║                                                               ║
+echo   ║                  KILL-METRAJ SYSTEM                           ║
+echo   ║                 --------------------                          ║
+echo   ║                 Local Deployment v1.0                         ║
+echo   ║                                                               ║
+echo   =================================================================
 echo.
-choice /C 123456 /T 5 /D 1 /M "Select: "
+echo     [1] Start Application      (Auto-starts in 5 seconds)
+echo     [2] Update from GitHub     (Downloads latest cloud changes)
+echo     [3] Rebuild Dependencies   (Fixes broken node_modules)
+echo     [4] Factory Reset DB       (Wipes SQLite database)
+echo     [5] Open Logs Folder       (View backend error logs)
+echo     [6] Exit Launcher
+echo.
+echo   =================================================================
+echo.
+choice /C 123456 /T 5 /D 1 /M "   Select an option: "
 
 if !errorlevel! equ 6 exit /b 0
 if !errorlevel! equ 5 goto :OPEN_LOGS
@@ -127,31 +133,26 @@ exit /b 0
 :: ──────────────────────────────────────────────────────────────────
 :CHECK_DEPS
 echo.
-echo [*] Checking dependencies...
+echo   [-] Checking system dependencies...
 
 if not exist "backend\node_modules\.bin\nodemon.cmd" (
-    :: 1 - Clean start
-    echo [*] Cleaning up old processes...
-    taskkill /F /FI "WINDOWTITLE eq Backend*" >nul 2>nul
-    taskkill /F /FI "WINDOWTITLE eq Frontend*" >nul 2>nul
-    taskkill /F /IM node.exe >nul 2>nul
-    echo [*] Installing backend packages...
+    echo   [!] Backend dependencies missing. Installing...
     cd backend
     call "!NPM_BIN!" install --no-fund --no-audit
-    if !errorlevel! neq 0 ( cd .. & echo [ERROR] Backend install failed! & pause & exit /b 1 )
+    if !errorlevel! neq 0 ( cd .. & echo   [ERROR] Backend install failed! & pause & exit /b 1 )
     cd ..
 ) else (
     if not exist "backend\node_modules\sqlite3" (
-        echo [*] Adding sqlite3...
+        echo   [!] SQLite driver missing. Installing...
         cd backend & call "!NPM_BIN!" install sqlite3 --no-fund --no-audit & cd ..
     )
 )
 
 if not exist "frontend\node_modules\.bin\vite.cmd" (
-    echo [*] Installing frontend packages...
+    echo   [!] Frontend dependencies missing. Installing...
     cd frontend
     call "!NPM_BIN!" install --no-fund --no-audit
-    if !errorlevel! neq 0 ( cd .. & echo [ERROR] Frontend install failed! & pause & exit /b 1 )
+    if !errorlevel! neq 0 ( cd .. & echo   [ERROR] Frontend install failed! & pause & exit /b 1 )
     cd ..
 )
 
@@ -167,6 +168,11 @@ set "ROOT=%CD%"
     echo set USE_SQLITE=true
     echo set PORT=5001
     echo call "!NPM_BIN!" run dev
+    echo if errorlevel 1 ^(
+    echo     echo [!] Backend failed to start. Attempting auto-repair...
+    echo     call "!NPM_BIN!" install --no-fund --no-audit
+    echo     call "!NPM_BIN!" run dev
+    echo ^)
     echo pause
 ) > "run_backend.bat"
 
@@ -175,34 +181,45 @@ set "ROOT=%CD%"
     echo title Frontend ^(5174^)
     echo cd /d "!ROOT!\frontend"
     echo call "!NPM_BIN!" run dev
+    echo if errorlevel 1 ^(
+    echo     echo [!] Frontend failed to start. Attempting auto-repair...
+    echo     call "!NPM_BIN!" install --no-fund --no-audit
+    echo     call "!NPM_BIN!" run dev
+    echo ^)
     echo pause
 ) > "run_frontend.bat"
 
 start "Backend  (5001)" cmd /k "run_backend.bat"
 start "Frontend (5174)" cmd /k "run_frontend.bat"
 
-echo [*] Waiting (up to 90 sec) for both servers...
+echo [*] Waiting for servers to start...
 set ATTEMPT=0
 :WAIT_LOOP
 set /a ATTEMPT+=1
 if !ATTEMPT! GTR 90 goto :OPEN_BROWSER
 powershell -NoProfile -Command ^
-  "try{ Invoke-WebRequest 'http://127.0.0.1:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; " ^
-  "Invoke-WebRequest 'http://127.0.0.1:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; exit 0 }catch{ exit 1 }" >nul 2>nul
+  "try{ Invoke-WebRequest 'http://localhost:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; " ^
+  "Invoke-WebRequest 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null; exit 0 }catch{ exit 1 }" >nul 2>nul
 if !errorlevel! equ 0 goto :OPEN_BROWSER
 timeout /t 1 /nobreak >nul
 goto :WAIT_LOOP
 
 :OPEN_BROWSER
 echo.
-echo  ===========================================================
-echo   READY
-echo   Site     : http://127.0.0.1:5174
-echo   API      : http://127.0.0.1:5001
-echo   Login    : admin
-echo   Password : password2026
-echo  ===========================================================
+echo   =================================================================
+echo   ║                       SYSTEM READY                            ║
+echo   =================================================================
+echo   ║                                                               ║
+echo   ║   Application URL :  http://localhost:5174                    ║
+echo   ║   API Endpoint    :  http://localhost:5001                    ║
+echo   ║                                                               ║
+echo   ║   Admin Login     :  admin                                    ║
+echo   ║   Admin Password  :  password2026                             ║
+echo   ║                                                               ║
+echo   =================================================================
 echo.
-start "" "http://127.0.0.1:5174"
+echo   [i] Keep this window and the two black server windows open.
+echo   [i] Opening browser automatically...
+start "" "http://localhost:5174"
 pause
 exit /b 0
