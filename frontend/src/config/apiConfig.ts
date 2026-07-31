@@ -3,8 +3,12 @@ export const getBaseUrl = (): string => {
     if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
     if (import.meta.env.VITE_BACKEND_URL) return import.meta.env.VITE_BACKEND_URL;
 
-    // 2. Локальный резерв
-    return 'http://127.0.0.1:5001';
+    // 2. В dev режиме используем пустую строку — запросы идут через прокси Vite (/api → 5001)
+    //    В production — пустая строка тоже корректна (same-origin)
+    if (import.meta.env.DEV) return '';
+
+    // 3. Фолбэк для нестандартных окружений
+    return '';
 };
 
 export const API_URL = getBaseUrl();
