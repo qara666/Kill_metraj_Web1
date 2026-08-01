@@ -33,7 +33,7 @@ goto :START
 :UPDATE_GIT
 echo.
 echo [*] Downloading update from GitHub...
-powershell -NoProfile -Command "$z='%TEMP%\km.zip';$d='%TEMP%\km_upd';if(Test-Path $d){Remove-Item $d -Recurse -Force};Invoke-WebRequest 'https://github.com/qara666/Kill_metraj_Web1/archive/refs/heads/main.zip' -OutFile $z -UseBasicParsing;Expand-Archive $z $d -Force;robocopy ($d+'\Kill_metraj_Web1-main') '%CD%' /E /IS /IT /XF .env database.sqlite /XD .git .portable-node node_modules | Out-Null;Remove-Item $z,$d -Recurse -Force -EA SilentlyContinue"
+powershell -NoProfile -Command "$z='%TEMP%\km.zip';$d='%TEMP%\km_upd';if(Test-Path $d){Remove-Item $d -Recurse -Force};Invoke-WebRequest 'https://github.com/qara666/Kill_metraj_Web1/archive/refs/heads/main.zip' -OutFile $z -UseBasicParsing;Expand-Archive $z $d -Force;robocopy ($d+'\Kill_metraj_Web1-main') '%CD%' /E /IS /IT /XF .env database.sqlite /XD .git node_modules | Out-Null;Remove-Item $z,$d -Recurse -Force -EA SilentlyContinue"
 echo [OK] Done.
 pause
 goto :MAIN_MENU
