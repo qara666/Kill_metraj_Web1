@@ -91,11 +91,18 @@ if not errorlevel 1 (
 )
 
 echo.
-echo   [ERROR] Node.js not found!
-echo   Install from: https://nodejs.org
-echo.
-pause
-exit /b 1
+echo   [WARN] Node.js not found! Downloading portable version...
+if not exist ".portable-node" mkdir ".portable-node"
+if not exist "%PNODE%\node.exe" (
+    echo   Downloading Node.js v20.14.0 (about 30MB)...
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
+    echo   Extracting Node.js...
+    powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
+    del ".portable-node\node.zip"
+)
+set "NPM=%PNODE%\npm.cmd"
+set "PATH=%PNODE%;%PATH%"
+echo [OK] Portable Node.js installed: %PNODE%
 
 :: ================================================================
 :CHECK_DEPS
