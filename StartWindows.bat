@@ -146,6 +146,7 @@ echo [*] Writing launch scripts...
 (
     echo @echo off
     echo title Backend-5001
+    echo set "PATH=%PNODE%;%%PATH%%"
     echo set "USE_SQLITE=true"
     echo set "PORT=5001"
     echo pushd "%ROOT%\backend"
@@ -160,6 +161,7 @@ echo [*] Writing launch scripts...
 (
     echo @echo off
     echo title Frontend-5174
+    echo set "PATH=%PNODE%;%%PATH%%"
     echo pushd "%ROOT%\frontend"
     echo call "%NPM%" run dev
     echo popd
@@ -187,7 +189,7 @@ if %CNT% gtr 90 (
     goto :OPEN
 )
 
-powershell -NoProfile -Command "try{iwr 'http://localhost:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;iwr 'http://localhost:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;exit 0}catch{exit 1}" >nul 2>nul
+powershell -NoProfile -Command "try{iwr 'http://127.0.0.1:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;iwr 'http://127.0.0.1:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;exit 0}catch{exit 1}" >nul 2>nul
 if errorlevel 1 (
     timeout /t 1 /nobreak >nul
     goto :WAIT
@@ -200,8 +202,8 @@ echo   ================================================================
 echo    [  KILL-METRAJ  ^|  READY!  ]
 echo   ================================================================
 echo.
-echo      Site     :  http://localhost:5174
-echo      API      :  http://localhost:5001
+echo      Site     :  http://127.0.0.1:5174
+echo      API      :  http://127.0.0.1:5001
 echo.
 echo      Login    :  admin
 echo      Password :  password2026
@@ -210,7 +212,7 @@ echo   ================================================================
 echo.
 echo   Press any key to STOP all servers and exit.
 echo.
-start "" "http://localhost:5174"
+start "" "http://127.0.0.1:5174"
 pause >nul
 
 taskkill /F /IM node.exe >nul 2>nul

@@ -14,12 +14,14 @@ set "PORTABLE_NODE=%ROOT%\.portable-node\node-v20.14.0-win-x64"
 set "NPM_EXEC=npm"
 if exist "%PORTABLE_NODE%\npm.cmd" (
     set "NPM_EXEC=%PORTABLE_NODE%\npm.cmd"
+    set "PATH=%PORTABLE_NODE%;%PATH%"
 )
 
 echo [*] Starting Backend...
 (
     echo @echo off
     echo title Backend (5001)
+    echo set "PATH=%%PATH%%"
     echo cd /d "%ROOT%\backend"
     echo set USE_SQLITE=true
     echo set PORT=5001
@@ -32,6 +34,7 @@ echo [*] Starting Frontend...
 (
     echo @echo off
     echo title Frontend (5174)
+    echo set "PATH=%%PATH%%"
     echo cd /d "%ROOT%\frontend"
     echo call "%NPM_EXEC%" run dev
     echo pause
