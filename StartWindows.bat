@@ -71,16 +71,16 @@ echo.
 :: Запоминаем корневую папку проекта
 set "ROOT=%~dp0"
 :: Убираем обратный слэш в конце если есть
-if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+if "!ROOT:~-1!"=="\" set "ROOT=!ROOT:~0,-1!"
 
-:: --- Найти npm ---
+:: --- Найти Node.js ---
 set "NPM=npm"
+set "PNODE=!ROOT!\.portable-node\node-v20.14.0-win-x64"
 
-set "PNODE=%ROOT%\.portable-node\node-v20.14.0-win-x64"
-if exist "%PNODE%\npm.cmd" (
-    set "NPM=%PNODE%\npm.cmd"
-    set "PATH=%PNODE%;%PATH%"
-    echo [OK] Portable Node.js: %PNODE%
+if exist "!PNODE!\npm.cmd" (
+    set "NPM=!PNODE!\npm.cmd"
+    set "PATH=!PNODE!;!PATH!"
+    echo [OK] Portable Node.js found
     goto :CHECK_DEPS
 )
 
@@ -93,46 +93,44 @@ if not errorlevel 1 (
 echo.
 echo   [WARN] Node.js not found! Downloading portable version...
 if not exist ".portable-node" mkdir ".portable-node"
-if not exist "%PNODE%\node.exe" (
-    echo   Downloading Node.js v20.14.0 (about 30MB)...
+if not exist "!PNODE!\node.exe" (
+    echo   Downloading Node.js v20.14.0 ...
     powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.14.0/node-v20.14.0-win-x64.zip' -OutFile '.portable-node\node.zip'"
-    echo   Extracting Node.js...
+    echo   Extracting...
     powershell -NoProfile -Command "Expand-Archive -Path '.portable-node\node.zip' -DestinationPath '.portable-node' -Force"
     del ".portable-node\node.zip"
 )
-set "NPM=%PNODE%\npm.cmd"
-set "PATH=%PNODE%;%PATH%"
-echo [OK] Portable Node.js installed: %PNODE%
+set "NPM=!PNODE!\npm.cmd"
+set "PATH=!PNODE!;!PATH!"
+echo [OK] Portable Node.js ready
 
 :: ================================================================
 :CHECK_DEPS
 echo.
 echo [*] Checking packages...
 
-if not exist "%ROOT%\backend\node_modules\express" (
-    echo [*] Installing backend packages (first time ~1 min)...
-    pushd "%ROOT%\backend"
-    call "%NPM%" install --no-fund --no-audit
-    set ERRLVL=%errorlevel%
+if not exist "!ROOT!\backend\node_modules\express" (
+    echo [*] Installing backend packages - please wait...
+    pushd "!ROOT!\backend"
+    call "!NPM!" install --no-fund --no-audit
     popd
-    if %ERRLVL% neq 0 (
+    if !errorlevel! neq 0 (
         echo [ERROR] Backend install failed!
         pause
-        exit /b 1
+        goto :MAIN_MENU
     )
     echo [OK] Backend packages installed.
 )
 
-if not exist "%ROOT%\frontend\node_modules\vite" (
-    echo [*] Installing frontend packages (first time ~1 min)...
-    pushd "%ROOT%\frontend"
-    call "%NPM%" install --no-fund --no-audit
-    set ERRLVL=%errorlevel%
+if not exist "!ROOT!\frontend\node_modules\vite" (
+    echo [*] Installing frontend packages - please wait...
+    pushd "!ROOT!\frontend"
+    call "!NPM!" install --no-fund --no-audit
     popd
-    if %ERRLVL% neq 0 (
+    if !errorlevel! neq 0 (
         echo [ERROR] Frontend install failed!
         pause
-        exit /b 1
+        goto :MAIN_MENU
     )
     echo [OK] Frontend packages installed.
 )
@@ -142,40 +140,37 @@ if not exist "%ROOT%\frontend\node_modules\vite" (
 echo.
 echo [*] Writing launch scripts...
 
-:: Записываем backend скрипт (используем %VAR% - они раскроются при записи)
-(
+:: Backend launch script
+> "!ROOT!\_launch_backend.bat" (
     echo @echo off
-    echo title Backend-5001
-    echo set "PATH=%PNODE%;%%PATH%%"
+    echo set "PATH=!PNODE!;%%PATH%%"
     echo set "USE_SQLITE=true"
     echo set "PORT=5001"
-    echo pushd "%ROOT%\backend"
-    echo call "%NPM%" run dev
-    echo popd
+    echo cd /d "!ROOT!\backend"
+    echo "!NPM!" run dev
     echo echo.
-    echo echo Backend stopped. Press any key...
-    echo pause ^>nul
-) > "%ROOT%\_launch_backend.bat"
+    echo echo Backend stopped.
+    echo pause
+)
 
-:: Записываем frontend скрипт
-(
+:: Frontend launch script
+> "!ROOT!\_launch_frontend.bat" (
     echo @echo off
-    echo title Frontend-5174
-    echo set "PATH=%PNODE%;%%PATH%%"
-    echo pushd "%ROOT%\frontend"
-    echo call "%NPM%" run dev
-    echo popd
+    echo set "PATH=!PNODE!;%%PATH%%"
+    echo cd /d "!ROOT!\frontend"
+    echo "!NPM!" run dev
     echo echo.
-    echo echo Frontend stopped. Press any key...
-    echo pause ^>nul
-) > "%ROOT%\_launch_frontend.bat"
+    echo echo Frontend stopped.
+    echo pause
+)
 
 echo [*] Starting Backend...
-start "Backend-5001"  cmd /k "%ROOT%\_launch_backend.bat"
-timeout /t 3 /nobreak >nul
+start "Backend-5001" cmd /c "!ROOT!\_launch_backend.bat"
+echo [*] Waiting 4 seconds for backend...
+timeout /t 4 /nobreak >nul
 
 echo [*] Starting Frontend...
-start "Frontend-5174" cmd /k "%ROOT%\_launch_frontend.bat"
+start "Frontend-5174" cmd /c "!ROOT!\_launch_frontend.bat"
 
 :: ================================================================
 echo.
@@ -184,14 +179,14 @@ set /a CNT=0
 
 :WAIT
 set /a CNT+=1
-if %CNT% gtr 90 (
+if !CNT! gtr 60 (
     echo [!] Timeout - opening anyway.
     goto :OPEN
 )
 
-powershell -NoProfile -Command "try{iwr 'http://127.0.0.1:5001/api/health' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;iwr 'http://127.0.0.1:5174' -UseBasicParsing -TimeoutSec 1 -EA Stop | Out-Null;exit 0}catch{exit 1}" >nul 2>nul
+powershell -NoProfile -Command "try{$null=Invoke-WebRequest 'http://127.0.0.1:5001/api/health' -UseBasicParsing -TimeoutSec 2;$null=Invoke-WebRequest 'http://127.0.0.1:5174' -UseBasicParsing -TimeoutSec 2;exit 0}catch{exit 1}" >nul 2>nul
 if errorlevel 1 (
-    timeout /t 1 /nobreak >nul
+    timeout /t 2 /nobreak >nul
     goto :WAIT
 )
 
@@ -216,6 +211,6 @@ start "" "http://127.0.0.1:5174"
 pause >nul
 
 taskkill /F /IM node.exe >nul 2>nul
-del /F /Q "%ROOT%\_launch_backend.bat" >nul 2>nul
-del /F /Q "%ROOT%\_launch_frontend.bat" >nul 2>nul
+del /F /Q "!ROOT!\_launch_backend.bat" >nul 2>nul
+del /F /Q "!ROOT!\_launch_frontend.bat" >nul 2>nul
 exit /b 0
